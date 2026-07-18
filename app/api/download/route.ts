@@ -1,7 +1,14 @@
 import { spawn } from "node:child_process";
 import { NextRequest, NextResponse } from "next/server";
 import { detectPlatform } from "@/lib/platform";
-import { TranscribeError, YT_DLP, commonArgs, fetchMeta } from "@/lib/ytdlp";
+import {
+  TranscribeError,
+  YT_CLIENT_SETS,
+  YT_DLP,
+  commonArgs,
+  fetchMeta,
+  shouldRotateClient,
+} from "@/lib/ytdlp";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -28,39 +35,56 @@ export async function GET(req: NextRequest) {
     const safeName =
       meta.title.replace(/[^\w\d -]+/g, "").trim().slice(0, 60) || "cwapa-video";
 
-    const child = spawn(YT_DLP, [...commonArgs(url), "-f", FORMAT, "-o", "-", url]);
+    // Rotate YouTube player clients when a failure is client-specific (DRM
+    // poisoning, bot checks); wait for the first chunk on each attempt so a
+    // failed download becomes a JSON error instead of an empty file.
+    const attempts = platform === "youtube" ? YT_CLIENT_SETS.length : 1;
+    let child: ReturnType<typeof spawn> | null = null;
+    let firstChunk: Buffer | null = null;
     let stderrBuf = "";
-    child.stderr.on("data", (d) => (stderrBuf += d));
 
-    // Wait for the first chunk so a failed download becomes a JSON error
-    // instead of an empty file.
-    const firstChunk = await new Promise<Buffer | null>((resolve, reject) => {
-      child.stdout.once("data", (d: Buffer) => {
-        child.stdout.pause();
-        resolve(d);
+    for (let i = 0; i < attempts; i++) {
+      const c = spawn(YT_DLP, [...commonArgs(url, i), "-f", FORMAT, "-o", "-", url]);
+      stderrBuf = "";
+      c.stderr!.on("data", (d) => (stderrBuf += d));
+
+      firstChunk = await new Promise<Buffer | null>((resolve, reject) => {
+        c.stdout!.once("data", (d: Buffer) => {
+          c.stdout!.pause();
+          resolve(d);
+        });
+        c.once("exit", () => resolve(null));
+        c.once("error", reject);
       });
-      child.once("exit", () => resolve(null));
-      child.once("error", reject);
-    });
 
-    if (!firstChunk) {
+      if (firstChunk) {
+        child = c;
+        break;
+      }
+      if (i + 1 < attempts && shouldRotateClient(stderrBuf)) continue;
+      break;
+    }
+
+    if (!firstChunk || !child) {
       const line = stderrBuf.split("\n").find((l) => l.startsWith("ERROR:"));
       return NextResponse.json(
         { error: line ? line.replace(/^ERROR:\s*/, "") : "Download failed." },
         { status: 502 }
       );
     }
+    const active = child;
 
+    const chunk = firstChunk;
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(new Uint8Array(firstChunk));
-        child.stdout.on("data", (d: Buffer) => controller.enqueue(new Uint8Array(d)));
-        child.stdout.on("end", () => controller.close());
-        child.stdout.on("error", (e) => controller.error(e));
-        child.stdout.resume();
+        controller.enqueue(new Uint8Array(chunk));
+        active.stdout!.on("data", (d: Buffer) => controller.enqueue(new Uint8Array(d)));
+        active.stdout!.on("end", () => controller.close());
+        active.stdout!.on("error", (e) => controller.error(e));
+        active.stdout!.resume();
       },
       cancel() {
-        child.kill("SIGKILL");
+        active.kill("SIGKILL");
       },
     });
 
