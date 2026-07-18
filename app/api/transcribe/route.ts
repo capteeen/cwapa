@@ -7,11 +7,15 @@ import {
   fetchYoutubeCaptions,
 } from "@/lib/ytdlp";
 import { transcribeWithWhisper, type TranscriptResult } from "@/lib/whisper";
+import { guard } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  const limited = guard(req, { heavy: true });
+  if (limited) return limited;
+
   let url: string;
   try {
     const body = await req.json();

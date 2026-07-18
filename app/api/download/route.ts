@@ -16,6 +16,8 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+import { guard } from "@/lib/ratelimit";
+
 const execFileAsync = promisify(execFile);
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 
@@ -36,6 +38,9 @@ const QUALITIES: Record<string, number | null> = {
 };
 
 export async function GET(req: NextRequest) {
+  const limited = guard(req, { heavy: true });
+  if (limited) return limited;
+
   const url = (req.nextUrl.searchParams.get("url") ?? "").trim();
   if (!url) {
     return NextResponse.json({ error: "Missing url parameter." }, { status: 400 });
