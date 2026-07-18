@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TranscribeError } from "@/lib/ytdlp";
+import { guard } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,6 +18,9 @@ function clock(seconds: number): string {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = guard(req);
+  if (limited) return limited;
+
   let query: string;
   let segments: Segment[];
   try {

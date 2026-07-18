@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { NextRequest, NextResponse } from "next/server";
 import { transcribeWithWhisper } from "@/lib/whisper";
 import { TranscribeError } from "@/lib/ytdlp";
+import { guard } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -15,6 +16,9 @@ const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 200 * 1024 * 1024);
 
 export async function POST(req: NextRequest) {
+  const limited = guard(req, { heavy: true });
+  if (limited) return limited;
+
   let file: File | null = null;
   try {
     const form = await req.formData();

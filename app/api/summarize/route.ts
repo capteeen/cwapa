@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { summarizeTranscript } from "@/lib/summarize";
 import { TranscribeError } from "@/lib/ytdlp";
+import { guard } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const limited = guard(req);
+  if (limited) return limited;
+
   let text: string;
   try {
     const body = await req.json();
