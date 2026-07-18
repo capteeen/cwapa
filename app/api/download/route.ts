@@ -1,21 +1,23 @@
-import { spawn } from "node:child_process";
+import { createReadStream } from "node:fs";
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { detectPlatform } from "@/lib/platform";
 import {
   TranscribeError,
-  YT_CLIENT_SETS,
-  YT_DLP,
-  commonArgs,
+  execYtDlp,
+  explainYtDlpFailure,
   fetchMeta,
-  shouldRotateClient,
 } from "@/lib/ytdlp";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// Progressive mp4 keeps the output streamable to stdout (merging separate
-// video+audio tracks can't stream); on YouTube this tops out around 720p.
-const FORMAT = "best[ext=mp4]/best";
+// Prefer an mp4/m4a merge, fall back to any best video+audio, then any best.
+// Downloading to a file (rather than streaming yt-dlp's stdout) lets ffmpeg
+// merge separate video/audio tracks, which many YouTube formats require.
+const FORMAT = "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b";
 
 export async function GET(req: NextRequest) {
   const url = (req.nextUrl.searchParams.get("url") ?? "").trim();
@@ -30,72 +32,64 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const dir = await mkdtemp(path.join(tmpdir(), "cwapa-dl-"));
+  const cleanup = () => rm(dir, { recursive: true, force: true }).catch(() => {});
   try {
     const meta = await fetchMeta(url);
     const safeName =
       meta.title.replace(/[^\w\d -]+/g, "").trim().slice(0, 60) || "cwapa-video";
 
-    // Rotate YouTube player clients when a failure is client-specific (DRM
-    // poisoning, bot checks); wait for the first chunk on each attempt so a
-    // failed download becomes a JSON error instead of an empty file.
-    const attempts = platform === "youtube" ? YT_CLIENT_SETS.length : 1;
-    let child: ReturnType<typeof spawn> | null = null;
-    let firstChunk: Buffer | null = null;
-    let stderrBuf = "";
+    await execYtDlp(
+      url,
+      [
+        "-f",
+        FORMAT,
+        "--merge-output-format",
+        "mp4",
+        "-o",
+        path.join(dir, "video.%(ext)s"),
+      ],
+      { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
+    );
 
-    for (let i = 0; i < attempts; i++) {
-      const c = spawn(YT_DLP, [...commonArgs(url, i), "-f", FORMAT, "-o", "-", url]);
-      stderrBuf = "";
-      c.stderr!.on("data", (d) => (stderrBuf += d));
-
-      firstChunk = await new Promise<Buffer | null>((resolve, reject) => {
-        c.stdout!.once("data", (d: Buffer) => {
-          c.stdout!.pause();
-          resolve(d);
-        });
-        c.once("exit", () => resolve(null));
-        c.once("error", reject);
-      });
-
-      if (firstChunk) {
-        child = c;
-        break;
-      }
-      if (i + 1 < attempts && shouldRotateClient(stderrBuf)) continue;
-      break;
+    const files = await readdir(dir);
+    const file = files.find((f) => f.startsWith("video."));
+    if (!file) {
+      await cleanup();
+      return NextResponse.json({ error: "Download produced no file." }, { status: 502 });
     }
+    const filePath = path.join(dir, file);
+    const size = (await stat(filePath)).size;
 
-    if (!firstChunk || !child) {
-      const line = stderrBuf.split("\n").find((l) => l.startsWith("ERROR:"));
-      return NextResponse.json(
-        { error: line ? line.replace(/^ERROR:\s*/, "") : "Download failed." },
-        { status: 502 }
-      );
-    }
-    const active = child;
-
-    const chunk = firstChunk;
+    const rs = createReadStream(filePath);
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(new Uint8Array(chunk));
-        active.stdout!.on("data", (d: Buffer) => controller.enqueue(new Uint8Array(d)));
-        active.stdout!.on("end", () => controller.close());
-        active.stdout!.on("error", (e) => controller.error(e));
-        active.stdout!.resume();
+        rs.on("data", (d) => controller.enqueue(new Uint8Array(d as Buffer)));
+        rs.on("end", () => {
+          controller.close();
+          void cleanup();
+        });
+        rs.on("error", (e) => {
+          controller.error(e);
+          void cleanup();
+        });
       },
       cancel() {
-        active.kill("SIGKILL");
+        rs.destroy();
+        void cleanup();
       },
     });
 
     return new Response(stream, {
       headers: {
         "Content-Type": "video/mp4",
+        "Content-Length": String(size),
         "Content-Disposition": `attachment; filename="${safeName}.mp4"`,
         "Cache-Control": "no-store",
       },
     });
-  } catch (err) {
+  } catch (err: any) {
+    await cleanup();
     if (err instanceof TranscribeError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
@@ -105,7 +99,7 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       );
     }
-    console.error("download failed:", err);
-    return NextResponse.json({ error: "Download failed. Try again." }, { status: 500 });
+    const explained = explainYtDlpFailure(String(err?.stderr || err?.message || ""));
+    return NextResponse.json({ error: explained.message }, { status: explained.status });
   }
 }
