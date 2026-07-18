@@ -4,6 +4,7 @@ import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { detectPlatform } from "./platform";
 
 const execFileAsync = promisify(execFile);
 
@@ -41,14 +42,23 @@ function resolveCookies(): string | null {
     const p = path.join(tmpdir(), "cwapa-cookies.txt");
     writeFileSync(p, Buffer.from(process.env.YT_DLP_COOKIES_B64, "base64"));
     cookiesPath = p;
+  } else if (process.env.YT_DLP_COOKIES_CONTENT) {
+    const p = path.join(tmpdir(), "cwapa-cookies.txt");
+    writeFileSync(p, process.env.YT_DLP_COOKIES_CONTENT);
+    cookiesPath = p;
   } else {
     cookiesPath = null;
   }
   return cookiesPath;
 }
 
-export function commonArgs(): string[] {
+export function commonArgs(url?: string): string[] {
   const args = ["--no-playlist", "--no-warnings"];
+  // YouTube blocks datacenter IPs on its default web clients ("Sign in to
+  // confirm you're not a bot"); the TV clients are usually exempt.
+  if (url && detectPlatform(url) === "youtube") {
+    args.push("--extractor-args", "youtube:player_client=tv_simply,tv,web_safari");
+  }
   const cookies = resolveCookies();
   if (cookies) {
     args.push("--cookies", cookies);
@@ -72,7 +82,7 @@ function explainYtDlpFailure(stderr: string): TranscribeError {
   }
   if (s.includes("sign in to confirm") || s.includes("not a bot") || s.includes("403")) {
     return new TranscribeError(
-      "The platform is blocking downloads from this server's IP (bot check). Configure YT_DLP_COOKIES with exported browser cookies to get past it.",
+      "The platform is blocking downloads from this server's IP (bot check). Add exported browser cookies via the YT_DLP_COOKIES_CONTENT environment variable to get past it.",
       502
     );
   }
@@ -85,7 +95,7 @@ export async function fetchMeta(url: string): Promise<VideoMeta> {
   try {
     ({ stdout } = await execFileAsync(
       YT_DLP,
-      [...commonArgs(), "--dump-json", "--skip-download", url],
+      [...commonArgs(url), "--dump-json", "--skip-download", url],
       { maxBuffer: 64 * 1024 * 1024, timeout: 120_000 }
     ));
   } catch (err: any) {
@@ -127,7 +137,7 @@ export async function downloadAudio(url: string): Promise<Buffer> {
       await execFileAsync(
         YT_DLP,
         [
-          ...commonArgs(),
+          ...commonArgs(url),
           "-f",
           "bestaudio/best",
           "-o",
@@ -205,7 +215,7 @@ export async function fetchYoutubeCaptions(
     await execFileAsync(
       YT_DLP,
       [
-        ...commonArgs(),
+        ...commonArgs(url),
         "--skip-download",
         "--write-subs",
         "--write-auto-subs",
