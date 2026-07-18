@@ -21,6 +21,9 @@ export default function RootLayout({
                 cwapa
               </Link>
               <div className="flex items-center gap-6 text-[14px]">
+                <Link href="/clip" className="text-muted transition hover:text-ink">
+                  Clip Finder
+                </Link>
                 <Link href="/tools" className="text-muted transition hover:text-ink">
                   Tools
                 </Link>
