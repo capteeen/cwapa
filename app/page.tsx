@@ -71,6 +71,11 @@ export default function Home() {
     setTimeout(() => setCopied(false), 1500);
   }
 
+  function downloadVideo() {
+    if (!url.trim()) return;
+    window.location.href = `/api/download?url=${encodeURIComponent(url.trim())}`;
+  }
+
   function download(kind: "txt" | "srt") {
     if (!result) return;
     const content =
@@ -118,6 +123,15 @@ export default function Home() {
           className="rounded-xl bg-accent px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-40"
         >
           {loading ? "Transcribing…" : "Transcribe"}
+        </button>
+        <button
+          type="button"
+          onClick={downloadVideo}
+          disabled={!platform}
+          title="Download the video as an MP4 file"
+          className="rounded-xl border border-ink-700 bg-ink-800 px-5 py-3.5 text-sm font-semibold text-zinc-300 transition hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Download MP4
         </button>
       </form>
 
@@ -181,6 +195,12 @@ export default function Home() {
               className="rounded-lg border border-ink-700 bg-ink-800 px-3.5 py-2 text-xs font-medium text-zinc-300 transition hover:border-accent/50 disabled:opacity-40"
             >
               Download .srt
+            </button>
+            <button
+              onClick={downloadVideo}
+              className="rounded-lg border border-ink-700 bg-ink-800 px-3.5 py-2 text-xs font-medium text-zinc-300 transition hover:border-accent/50"
+            >
+              Download video
             </button>
             <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-zinc-400">
               <input

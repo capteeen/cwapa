@@ -50,6 +50,7 @@ docker run -p 3000:3000 -e OPENAI_API_KEY=sk-... cwapa
 | `FFMPEG_PATH` | `ffmpeg` | Path to the ffmpeg binary |
 | `MAX_VIDEO_SECONDS` | `3600` | Reject videos longer than this |
 | `YT_DLP_COOKIES` | — | Cookies file for Instagram / age-gated content |
+| `YT_DLP_COOKIES_B64` | — | Same as above but base64 content (for Railway-style hosts) |
 
 ### Free transcription with Groq
 
@@ -63,6 +64,10 @@ WHISPER_API_URL=https://api.groq.com/openai/v1/audio/transcriptions
 ### A note on Instagram
 
 Instagram frequently requires a logged-in session to download media. If Instagram links fail, export your browser cookies to a file (e.g. with a "Get cookies.txt" extension) and set `YT_DLP_COOKIES` to its path.
+
+## Downloading videos
+
+Next to the Transcribe button there's a **Download MP4** button that saves the video itself. Under the hood it's `GET /api/download?url=...`, which streams a progressive MP4 (on YouTube this tops out around 720p — higher resolutions require merging separate video/audio tracks, which can't be streamed).
 
 ## API
 
