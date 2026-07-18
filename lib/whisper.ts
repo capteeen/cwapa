@@ -26,13 +26,19 @@ export async function transcribeWithWhisper(audio: Buffer): Promise<TranscriptRe
     );
   }
 
+  // Any OpenAI-compatible transcription endpoint works, e.g. Groq's free
+  // hosted Whisper: https://api.groq.com/openai/v1/audio/transcriptions
+  const apiUrl =
+    process.env.WHISPER_API_URL || "https://api.openai.com/v1/audio/transcriptions";
+  const defaultModel = apiUrl.includes("groq.com") ? "whisper-large-v3-turbo" : "whisper-1";
+
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(audio)], { type: "audio/mpeg" }), "audio.mp3");
-  form.append("model", process.env.WHISPER_MODEL || "whisper-1");
+  form.append("model", process.env.WHISPER_MODEL || defaultModel);
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "segment");
 
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  const res = await fetch(apiUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
