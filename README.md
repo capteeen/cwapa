@@ -43,11 +43,22 @@ docker run -p 3000:3000 -e OPENAI_API_KEY=sk-... cwapa
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | — | Whisper transcription (required for TikTok/Instagram) |
-| `WHISPER_MODEL` | `whisper-1` | Whisper model name |
+| `OPENAI_API_KEY` | — | API key for the Whisper provider (required for TikTok/Instagram) |
+| `WHISPER_API_URL` | OpenAI's endpoint | Any OpenAI-compatible transcription endpoint (e.g. Groq) |
+| `WHISPER_MODEL` | `whisper-1` (`whisper-large-v3-turbo` on Groq) | Whisper model name |
 | `YT_DLP_PATH` | `yt-dlp` | Path to the yt-dlp binary |
+| `FFMPEG_PATH` | `ffmpeg` | Path to the ffmpeg binary |
 | `MAX_VIDEO_SECONDS` | `3600` | Reject videos longer than this |
 | `YT_DLP_COOKIES` | — | Cookies file for Instagram / age-gated content |
+
+### Free transcription with Groq
+
+Don't want to pay OpenAI? [Groq](https://console.groq.com) hosts Whisper with a generous free tier and an OpenAI-compatible API. Create a key at https://console.groq.com/keys, then set:
+
+```
+OPENAI_API_KEY=gsk_your_groq_key
+WHISPER_API_URL=https://api.groq.com/openai/v1/audio/transcriptions
+```
 
 ### A note on Instagram
 
