@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 const YT_DLP = process.env.YT_DLP_PATH || "yt-dlp";
+const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 const MAX_DURATION_SECONDS = Number(process.env.MAX_VIDEO_SECONDS || 3600);
 
 export interface VideoMeta {
@@ -47,6 +48,12 @@ function explainYtDlpFailure(stderr: string): TranscribeError {
   if (s.includes("unsupported url")) {
     return new TranscribeError("This URL is not supported.", 422);
   }
+  if (s.includes("sign in to confirm") || s.includes("not a bot") || s.includes("403")) {
+    return new TranscribeError(
+      "The platform is blocking downloads from this server's IP (bot check). Configure YT_DLP_COOKIES with exported browser cookies to get past it.",
+      502
+    );
+  }
   const firstError = stderr.split("\n").find((l) => l.startsWith("ERROR:"));
   return new TranscribeError(firstError ? firstError.replace(/^ERROR:\s*/, "") : "Failed to fetch the video.", 502);
 }
@@ -85,38 +92,79 @@ export async function fetchMeta(url: string): Promise<VideoMeta> {
 }
 
 /**
- * Downloads the audio track as a small mono mp3 suitable for the Whisper API
- * (25 MB limit). Returns the file buffer; cleans up temp files itself.
+ * Downloads the media, then converts it to a small mono mp3 suitable for the
+ * Whisper API (25 MB limit) with a direct ffmpeg call. We deliberately avoid
+ * yt-dlp's --extract-audio postprocessor: its codec sniffing chokes on some
+ * TikTok/Instagram files ("unable to obtain file audio codec with ffprobe")
+ * that ffmpeg itself converts fine.
  */
 export async function downloadAudio(url: string): Promise<Buffer> {
   const dir = await mkdtemp(path.join(tmpdir(), "cwapa-"));
   try {
-    await execFileAsync(
-      YT_DLP,
-      [
-        ...commonArgs(),
-        "-x",
-        "--audio-format",
-        "mp3",
-        "--postprocessor-args",
-        "ffmpeg:-ac 1 -ar 16000 -b:a 32k",
-        "-o",
-        path.join(dir, "audio.%(ext)s"),
-        url,
-      ],
-      { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
-    );
-    const files = await readdir(dir);
-    const audioFile = files.find((f) => f.startsWith("audio."));
-    if (!audioFile) {
-      throw new TranscribeError("Audio extraction produced no file (is ffmpeg installed?).", 500);
+    try {
+      await execFileAsync(
+        YT_DLP,
+        [
+          ...commonArgs(),
+          "-f",
+          "bestaudio/best",
+          "-o",
+          path.join(dir, "source.%(ext)s"),
+          url,
+        ],
+        { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
+      );
+    } catch (err: any) {
+      if (err?.code === "ENOENT") {
+        throw new TranscribeError("yt-dlp is not installed on the server. See README for setup.", 500);
+      }
+      throw explainYtDlpFailure(String(err?.stderr || err?.message || ""));
     }
-    return await readFile(path.join(dir, audioFile));
+
+    // Pick the largest downloaded file (photo posts can produce several).
+    const files = await readdir(dir);
+    let sourcePath: string | null = null;
+    let sourceSize = 0;
+    for (const f of files) {
+      const size = (await stat(path.join(dir, f))).size;
+      if (size > sourceSize) {
+        sourceSize = size;
+        sourcePath = path.join(dir, f);
+      }
+    }
+    if (!sourcePath || sourceSize === 0) {
+      throw new TranscribeError("The download produced no media file.", 502);
+    }
+
+    // If the "media" is actually an HTML/JSON error page, the platform blocked
+    // the download (common for datacenter IPs). Fail with a useful message.
+    const head = (await readFile(sourcePath)).subarray(0, 256).toString("utf8").trimStart();
+    if (head.startsWith("<") || head.startsWith("{")) {
+      throw new TranscribeError(
+        "The platform refused to serve the video to this server (IP blocking). Try again, or configure YT_DLP_COOKIES.",
+        502
+      );
+    }
+
+    const outPath = path.join(dir, "out.mp3");
+    try {
+      await execFileAsync(
+        FFMPEG,
+        ["-y", "-i", sourcePath, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", outPath],
+        { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
+      );
+    } catch (err: any) {
+      if (err?.code === "ENOENT") {
+        throw new TranscribeError("ffmpeg is not installed on the server. See README for setup.", 500);
+      }
+      throw new TranscribeError(
+        "Could not extract an audio track from this post. If it's a TikTok photo/slideshow, it may have no speech to transcribe.",
+        422
+      );
+    }
+    return await readFile(outPath);
   } catch (err: any) {
     if (err instanceof TranscribeError) throw err;
-    if (err?.code === "ENOENT") {
-      throw new TranscribeError("yt-dlp is not installed on the server. See README for setup.", 500);
-    }
     throw explainYtDlpFailure(String(err?.stderr || err?.message || ""));
   } finally {
     await rm(dir, { recursive: true, force: true });
