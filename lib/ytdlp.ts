@@ -52,18 +52,69 @@ function resolveCookies(): string | null {
   return cookiesPath;
 }
 
-export function commonArgs(url?: string): string[] {
+/**
+ * YouTube plays whack-a-mole with datacenter IPs: web clients hit the
+ * "confirm you're not a bot" wall, TV clients sometimes get served only
+ * DRM-flagged formats. Different player clients fail differently, so we
+ * rotate through these sets until one yields usable formats.
+ * formats=missing_pot admits formats YouTube withholds PO tokens for.
+ */
+export const YT_CLIENT_SETS = [
+  "youtube:player_client=tv_simply,web_safari;formats=missing_pot",
+  "youtube:player_client=android_vr;formats=missing_pot",
+  "youtube:player_client=web,tv;formats=missing_pot",
+];
+
+export function shouldRotateClient(stderr: string): boolean {
+  const s = stderr.toLowerCase();
+  return (
+    s.includes("drm") ||
+    s.includes("sign in to confirm") ||
+    s.includes("not a bot") ||
+    s.includes("po token") ||
+    s.includes("requested format is not available") ||
+    s.includes("403")
+  );
+}
+
+export function commonArgs(url?: string, clientSet = 0): string[] {
   const args = ["--no-playlist", "--no-warnings"];
-  // YouTube blocks datacenter IPs on its default web clients ("Sign in to
-  // confirm you're not a bot"); the TV clients are usually exempt.
   if (url && detectPlatform(url) === "youtube") {
-    args.push("--extractor-args", "youtube:player_client=tv_simply,tv,web_safari");
+    args.push("--extractor-args", YT_CLIENT_SETS[Math.min(clientSet, YT_CLIENT_SETS.length - 1)]);
   }
   const cookies = resolveCookies();
   if (cookies) {
     args.push("--cookies", cookies);
   }
   return args;
+}
+
+/**
+ * Runs yt-dlp, rotating through YouTube player-client sets when a failure
+ * looks client-specific (DRM poisoning, bot checks, missing formats).
+ */
+async function execYtDlp(
+  url: string,
+  extraArgs: string[],
+  opts: { maxBuffer: number; timeout: number }
+): Promise<{ stdout: string; stderr: string }> {
+  const attempts = detectPlatform(url) === "youtube" ? YT_CLIENT_SETS.length : 1;
+  let lastErr: any;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await execFileAsync(YT_DLP, [...commonArgs(url, i), ...extraArgs, url], opts);
+    } catch (err: any) {
+      if (err?.code === "ENOENT") {
+        throw new TranscribeError("yt-dlp is not installed on the server. See README for setup.", 500);
+      }
+      lastErr = err;
+      if (i + 1 < attempts && shouldRotateClient(String(err?.stderr ?? ""))) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
 }
 
 function explainYtDlpFailure(stderr: string): TranscribeError {
@@ -80,6 +131,12 @@ function explainYtDlpFailure(stderr: string): TranscribeError {
   if (s.includes("unsupported url")) {
     return new TranscribeError("This URL is not supported.", 422);
   }
+  if (s.includes("drm")) {
+    return new TranscribeError(
+      "YouTube is serving this video in a locked (DRM) form to this server — an anti-bot measure, tried multiple workarounds. Adding browser cookies via YT_DLP_COOKIES_CONTENT usually resolves it.",
+      502
+    );
+  }
   if (s.includes("sign in to confirm") || s.includes("not a bot") || s.includes("403")) {
     return new TranscribeError(
       "The platform is blocking downloads from this server's IP (bot check). Add exported browser cookies via the YT_DLP_COOKIES_CONTENT environment variable to get past it.",
@@ -93,15 +150,12 @@ function explainYtDlpFailure(stderr: string): TranscribeError {
 export async function fetchMeta(url: string): Promise<VideoMeta> {
   let stdout: string;
   try {
-    ({ stdout } = await execFileAsync(
-      YT_DLP,
-      [...commonArgs(url), "--dump-json", "--skip-download", url],
-      { maxBuffer: 64 * 1024 * 1024, timeout: 120_000 }
-    ));
+    ({ stdout } = await execYtDlp(url, ["--dump-json", "--skip-download"], {
+      maxBuffer: 64 * 1024 * 1024,
+      timeout: 120_000,
+    }));
   } catch (err: any) {
-    if (err?.code === "ENOENT") {
-      throw new TranscribeError("yt-dlp is not installed on the server. See README for setup.", 500);
-    }
+    if (err instanceof TranscribeError) throw err;
     throw explainYtDlpFailure(String(err?.stderr || err?.message || ""));
   }
 
@@ -134,22 +188,13 @@ export async function downloadAudio(url: string): Promise<Buffer> {
   const dir = await mkdtemp(path.join(tmpdir(), "cwapa-"));
   try {
     try {
-      await execFileAsync(
-        YT_DLP,
-        [
-          ...commonArgs(url),
-          "-f",
-          "bestaudio/best",
-          "-o",
-          path.join(dir, "source.%(ext)s"),
-          url,
-        ],
+      await execYtDlp(
+        url,
+        ["-f", "bestaudio/best", "-o", path.join(dir, "source.%(ext)s")],
         { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
       );
     } catch (err: any) {
-      if (err?.code === "ENOENT") {
-        throw new TranscribeError("yt-dlp is not installed on the server. See README for setup.", 500);
-      }
+      if (err instanceof TranscribeError) throw err;
       throw explainYtDlpFailure(String(err?.stderr || err?.message || ""));
     }
 
@@ -212,10 +257,9 @@ export async function fetchYoutubeCaptions(
 ): Promise<{ segments: { start: number; end: number; text: string }[] } | null> {
   const dir = await mkdtemp(path.join(tmpdir(), "cwapa-subs-"));
   try {
-    await execFileAsync(
-      YT_DLP,
+    await execYtDlp(
+      url,
       [
-        ...commonArgs(url),
         "--skip-download",
         "--write-subs",
         "--write-auto-subs",
@@ -225,7 +269,6 @@ export async function fetchYoutubeCaptions(
         "json3",
         "-o",
         path.join(dir, "subs"),
-        url,
       ],
       { maxBuffer: 16 * 1024 * 1024, timeout: 120_000 }
     );
