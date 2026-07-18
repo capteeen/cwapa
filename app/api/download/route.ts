@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const safeName =
       meta.title.replace(/[^\w\d -]+/g, "").trim().slice(0, 60) || "cwapa-video";
 
-    const child = spawn(YT_DLP, [...commonArgs(), "-f", FORMAT, "-o", "-", url]);
+    const child = spawn(YT_DLP, [...commonArgs(url), "-f", FORMAT, "-o", "-", url]);
     let stderrBuf = "";
     child.stderr.on("data", (d) => (stderrBuf += d));
 

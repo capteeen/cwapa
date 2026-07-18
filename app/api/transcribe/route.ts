@@ -39,9 +39,22 @@ export async function POST(req: NextRequest) {
     let source: "whisper" | "captions";
 
     if (process.env.OPENAI_API_KEY) {
-      const audio = await downloadAudio(url);
-      transcript = await transcribeWithWhisper(audio);
-      source = "whisper";
+      try {
+        const audio = await downloadAudio(url);
+        transcript = await transcribeWithWhisper(audio);
+        source = "whisper";
+      } catch (err) {
+        // YouTube sometimes blocks the media download from datacenter IPs
+        // while captions remain reachable — fall back before giving up.
+        const captions = platform === "youtube" ? await fetchYoutubeCaptions(url) : null;
+        if (!captions) throw err;
+        transcript = {
+          text: captions.segments.map((s) => s.text).join(" "),
+          language: null,
+          segments: captions.segments,
+        };
+        source = "captions";
+      }
     } else if (platform === "youtube") {
       const captions = await fetchYoutubeCaptions(url);
       if (!captions) {
