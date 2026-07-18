@@ -61,6 +61,12 @@ export default function TranscriberTool({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [summarizing, setSummarizing] = useState(false);
+  const [momentQuery, setMomentQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [moments, setMoments] = useState<
+    | { index: number; reason: string; segment: { start: number; end: number; text: string } }[]
+    | null
+  >(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const platform = useMemo(() => detectPlatform(url), [url]);
@@ -95,6 +101,8 @@ export default function TranscriberTool({
     setError(null);
     setResult(null);
     setSummary(null);
+    setMoments(null);
+    setMomentQuery("");
     try {
       let res: Response;
       if (mode === "link") {
@@ -157,6 +165,36 @@ export default function TranscriberTool({
     } finally {
       setSummarizing(false);
     }
+  }
+
+  async function searchMoments(e: React.FormEvent) {
+    e.preventDefault();
+    if (!result || !momentQuery.trim() || searching) return;
+    setSearching(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/search-moments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: momentQuery.trim(),
+          segments: result.transcript.segments,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "Moment search failed.");
+      else setMoments(data.matches);
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function momentLink(start: number): string | null {
+    if (result?.platform !== "youtube" || !result.meta.webpageUrl) return null;
+    const sep = result.meta.webpageUrl.includes("?") ? "&" : "?";
+    return `${result.meta.webpageUrl}${sep}t=${Math.max(0, Math.floor(start))}s`;
   }
 
   async function copyTranscript() {
@@ -366,6 +404,64 @@ export default function TranscriberTool({
           {summary && (
             <div className="mt-4 whitespace-pre-wrap rounded-2xl bg-accent/5 p-6 text-[14px] leading-relaxed">
               {summary}
+            </div>
+          )}
+
+          {result.transcript.segments.length > 0 && (
+            <div className="mt-6">
+              <form onSubmit={searchMoments} className="relative">
+                <input
+                  value={momentQuery}
+                  onChange={(e) => setMomentQuery(e.target.value)}
+                  placeholder="Search for any moment — “when they talk about pricing”"
+                  className="w-full rounded-full bg-surface py-3 pl-5 pr-24 text-[14px] outline-none transition placeholder:text-muted focus:ring-2 focus:ring-accent/40"
+                />
+                <button
+                  type="submit"
+                  disabled={searching || !momentQuery.trim()}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full bg-accent px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-accent-hover disabled:opacity-30"
+                >
+                  {searching ? "…" : "Search"}
+                </button>
+              </form>
+
+              {moments && (
+                <div className="mt-3 space-y-2">
+                  {moments.length === 0 && (
+                    <p className="py-3 text-center text-[13px] text-muted">
+                      No moments matched that search.
+                    </p>
+                  )}
+                  {moments.map((m) => {
+                    const link = momentLink(m.segment.start);
+                    const stamp = (
+                      <span className="shrink-0 rounded-full bg-accent/10 px-2.5 py-1 font-mono text-[12px] font-medium text-accent">
+                        {formatClock(m.segment.start)}
+                      </span>
+                    );
+                    return (
+                      <div
+                        key={m.index}
+                        className="flex items-start gap-3 rounded-2xl bg-surface px-4 py-3"
+                      >
+                        {link ? (
+                          <a href={link} target="_blank" rel="noreferrer" title="Open the video at this moment">
+                            {stamp}
+                          </a>
+                        ) : (
+                          stamp
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-[14px] leading-relaxed">{m.segment.text}</p>
+                          {m.reason && (
+                            <p className="mt-0.5 text-[12px] text-muted">{m.reason}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

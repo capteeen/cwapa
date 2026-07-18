@@ -15,11 +15,15 @@ export default function Home() {
 
       <TranscriberTool />
 
-      <section className="mt-16 grid gap-3 sm:grid-cols-3">
+      <section className="mt-16 grid gap-3 sm:grid-cols-2">
         {[
           {
             title: "Transcripts",
             body: "Accurate, timestamped speech-to-text in any language — from a link or your own files.",
+          },
+          {
+            title: "Moment search",
+            body: "Search any moment in plain English and jump straight to it.",
           },
           {
             title: "AI summaries",
