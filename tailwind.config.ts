@@ -8,15 +8,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: {
-          950: "#0a0a0f",
-          900: "#101018",
-          800: "#181824",
-          700: "#232334",
-        },
+        // Apple-inspired neutrals: near-black text, soft gray surfaces,
+        // hairline separators, one blue accent.
+        ink: "#1d1d1f",
+        muted: "#86868b",
+        surface: "#f5f5f7",
+        hairline: "#d2d2d7",
         accent: {
-          DEFAULT: "#8b5cf6",
-          soft: "#a78bfa",
+          DEFAULT: "#0071e3",
+          hover: "#0077ed",
         },
       },
     },

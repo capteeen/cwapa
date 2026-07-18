@@ -26,17 +26,17 @@ interface HistoryItem {
 }
 
 const PLATFORM_BADGE: Record<Platform, string> = {
-  youtube: "bg-red-500/15 text-red-300 border-red-500/30",
-  tiktok: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
-  instagram: "bg-pink-500/15 text-pink-300 border-pink-500/30",
+  youtube: "bg-red-50 text-red-600",
+  tiktok: "bg-zinc-100 text-zinc-800",
+  instagram: "bg-pink-50 text-pink-600",
 };
 
 const DOWNLOAD_FORMATS = [
-  { value: "best", label: "MP4 · Best quality" },
+  { value: "best", label: "MP4 · Best" },
   { value: "1080", label: "MP4 · 1080p" },
   { value: "720", label: "MP4 · 720p" },
   { value: "480", label: "MP4 · 480p" },
-  { value: "mp3", label: "MP3 · Audio only" },
+  { value: "mp3", label: "MP3 · Audio" },
 ] as const;
 
 const HISTORY_KEY = "cwapa.history";
@@ -142,27 +142,23 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <nav className="sticky top-0 z-10 border-b border-ink-800 bg-ink-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3.5">
-          <span className="text-xl font-black tracking-tight">
-            cwa<span className="text-accent-soft">pa</span>
+      <nav className="sticky top-0 z-10 border-b border-hairline/60 bg-white/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+          <span className="text-lg font-semibold tracking-tight">cwapa</span>
+          <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted">
+            Beta
           </span>
-          <div className="flex items-center gap-3">
-            <span className="rounded-full border border-accent/30 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent-soft">
-              beta
-            </span>
-          </div>
         </div>
       </nav>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-5 pb-20 pt-14">
-        <header className="mb-10 text-center">
-          <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
-            Turn any video into <span className="text-accent-soft">text</span>
+      <main className="mx-auto w-full max-w-2xl flex-1 px-6 pb-24 pt-20">
+        <header className="mb-12 text-center">
+          <h1 className="text-4xl font-semibold tracking-tight sm:text-[44px] sm:leading-tight">
+            Turn any video into text.
           </h1>
-          <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-            Paste a TikTok, YouTube, or Instagram link. Get a clean, timestamped
-            transcript — or download the video and audio in the quality you want.
+          <p className="mx-auto mt-4 max-w-md text-[17px] leading-relaxed text-muted">
+            Paste a TikTok, YouTube, or Instagram link. Get a clean transcript,
+            or download the video or audio.
           </p>
         </header>
 
@@ -171,31 +167,32 @@ export default function Home() {
             <input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://www.tiktok.com/@user/video/…"
+              placeholder="Paste a video link"
               spellCheck={false}
-              className="w-full rounded-xl border border-ink-700 bg-ink-900 px-4 py-3.5 pr-24 text-sm outline-none placeholder:text-zinc-600 focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
+              className="w-full rounded-2xl bg-surface px-5 py-4 text-[15px] outline-none transition placeholder:text-muted focus:ring-2 focus:ring-accent/40"
             />
             {platform && (
               <span
-                className={`absolute right-3 top-1/2 -translate-y-1/2 rounded-full border px-2.5 py-0.5 text-xs font-medium ${PLATFORM_BADGE[platform]}`}
+                className={`absolute right-4 top-1/2 -translate-y-1/2 rounded-full px-2.5 py-1 text-xs font-medium ${PLATFORM_BADGE[platform]}`}
               >
                 {PLATFORM_LABELS[platform]}
               </span>
             )}
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
+
+          <div className="mt-1 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <button
               type="submit"
               disabled={loading || !url.trim()}
-              className="flex-1 rounded-xl bg-accent px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-40"
+              className="w-full rounded-full bg-accent px-8 py-3 text-[15px] font-medium text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-30 sm:w-auto"
             >
               {loading ? "Transcribing…" : "Transcribe"}
             </button>
-            <div className="flex flex-1 gap-2">
+            <div className="flex w-full gap-2 sm:w-auto">
               <select
                 value={dlFormat}
                 onChange={(e) => setDlFormat(e.target.value)}
-                className="min-w-0 flex-1 rounded-xl border border-ink-700 bg-ink-900 px-3 py-3.5 text-sm text-zinc-300 outline-none focus:border-accent/60"
+                className="flex-1 appearance-none rounded-full border border-hairline bg-white px-4 py-3 text-center text-[15px] text-ink outline-none transition focus:border-accent sm:flex-none"
               >
                 {DOWNLOAD_FORMATS.map((f) => (
                   <option key={f.value} value={f.value}>
@@ -207,7 +204,7 @@ export default function Home() {
                 type="button"
                 onClick={downloadMedia}
                 disabled={!platform || preparing}
-                className="rounded-xl border border-ink-700 bg-ink-800 px-5 py-3.5 text-sm font-semibold text-zinc-300 transition hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-full border border-hairline bg-white px-6 py-3 text-[15px] font-medium text-accent transition hover:border-accent disabled:cursor-not-allowed disabled:opacity-30"
               >
                 {preparing ? "Preparing…" : "Download"}
               </button>
@@ -216,48 +213,48 @@ export default function Home() {
         </form>
 
         {preparing && (
-          <p className="mt-3 text-center text-xs text-zinc-500">
-            Fetching and converting on the server — your browser&apos;s download
-            will start in a moment.
+          <p className="mt-4 text-center text-[13px] text-muted">
+            Fetching and converting — your download will begin shortly.
           </p>
         )}
 
         {loading && (
-          <div className="mt-10 flex flex-col items-center gap-3 text-zinc-400">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink-700 border-t-accent" />
-            <p className="text-sm">
-              Fetching the video and transcribing the audio — longer videos take
-              a bit…
+          <div className="mt-14 flex flex-col items-center gap-4">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-surface border-t-accent" />
+            <p className="text-[15px] text-muted">
+              Transcribing — longer videos take a moment.
             </p>
           </div>
         )}
 
         {error && (
-          <div className="mt-8 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <div className="mt-8 rounded-2xl bg-red-50 px-5 py-4 text-center text-[14px] text-red-600">
             {error}
           </div>
         )}
 
         {result && (
-          <section className="mt-10">
-            <div className="flex items-start gap-4 rounded-xl border border-ink-700 bg-ink-900 p-4">
+          <section className="mt-12">
+            <div className="flex items-start gap-4 rounded-2xl bg-surface p-5">
               {result.meta.thumbnail && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={result.meta.thumbnail}
                   alt=""
-                  className="hidden h-20 w-32 rounded-lg object-cover sm:block"
+                  className="hidden h-20 w-32 rounded-xl object-cover sm:block"
                 />
               )}
               <div className="min-w-0">
-                <h2 className="truncate font-semibold">{result.meta.title}</h2>
-                <p className="mt-1 text-sm text-zinc-400">
+                <h2 className="truncate text-[15px] font-semibold">
+                  {result.meta.title}
+                </h2>
+                <p className="mt-1 text-[13px] text-muted">
                   {result.meta.uploader} ·{" "}
                   {formatClock(result.meta.durationSeconds)}
                   {result.transcript.language &&
                     ` · ${result.transcript.language}`}
                 </p>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-[12px] text-muted/80">
                   {result.source === "whisper"
                     ? "Transcribed with Whisper"
                     : "From YouTube captions"}
@@ -265,43 +262,43 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="mt-5 flex flex-wrap items-center gap-2">
               <button
                 onClick={copyTranscript}
-                className="rounded-lg border border-ink-700 bg-ink-800 px-3.5 py-2 text-xs font-medium text-zinc-300 transition hover:border-accent/50"
+                className="rounded-full bg-surface px-4 py-2 text-[13px] font-medium text-ink transition hover:bg-hairline/40"
               >
                 {copied ? "Copied ✓" : "Copy"}
               </button>
               <button
                 onClick={() => download("txt")}
-                className="rounded-lg border border-ink-700 bg-ink-800 px-3.5 py-2 text-xs font-medium text-zinc-300 transition hover:border-accent/50"
+                className="rounded-full bg-surface px-4 py-2 text-[13px] font-medium text-ink transition hover:bg-hairline/40"
               >
-                Download .txt
+                Text file
               </button>
               <button
                 onClick={() => download("srt")}
                 disabled={result.transcript.segments.length === 0}
-                className="rounded-lg border border-ink-700 bg-ink-800 px-3.5 py-2 text-xs font-medium text-zinc-300 transition hover:border-accent/50 disabled:opacity-40"
+                className="rounded-full bg-surface px-4 py-2 text-[13px] font-medium text-ink transition hover:bg-hairline/40 disabled:opacity-30"
               >
-                Download .srt
+                Subtitles (.srt)
               </button>
-              <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-zinc-400">
+              <label className="ml-auto flex cursor-pointer items-center gap-2 text-[13px] text-muted">
                 <input
                   type="checkbox"
                   checked={showTimestamps}
                   onChange={(e) => setShowTimestamps(e.target.checked)}
-                  className="accent-purple-500"
+                  className="accent-[#0071e3]"
                 />
                 Timestamps
               </label>
             </div>
 
-            <div className="mt-4 max-h-[28rem] overflow-y-auto rounded-xl border border-ink-700 bg-ink-900 p-5 leading-relaxed">
+            <div className="mt-4 max-h-[30rem] overflow-y-auto rounded-2xl border border-hairline/60 p-6 leading-relaxed">
               {showTimestamps && result.transcript.segments.length > 0 ? (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {result.transcript.segments.map((seg, i) => (
-                    <p key={i} className="text-sm">
-                      <span className="mr-3 select-none font-mono text-xs text-accent-soft/70">
+                    <p key={i} className="text-[15px]">
+                      <span className="mr-3 select-none font-mono text-[12px] text-accent/70">
                         {formatClock(seg.start)}
                       </span>
                       {seg.text}
@@ -309,7 +306,7 @@ export default function Home() {
                   ))}
                 </div>
               ) : (
-                <p className="whitespace-pre-wrap text-sm">
+                <p className="whitespace-pre-wrap text-[15px]">
                   {result.transcript.text}
                 </p>
               )}
@@ -318,23 +315,23 @@ export default function Home() {
         )}
 
         {!result && !loading && history.length > 0 && (
-          <section className="mt-12">
-            <h3 className="mb-3 text-sm font-semibold text-zinc-400">Recent</h3>
+          <section className="mt-16">
+            <h3 className="mb-3 text-center text-[13px] font-medium uppercase tracking-wide text-muted">
+              Recent
+            </h3>
             <ul className="space-y-2">
               {history.map((h) => (
                 <li key={h.url}>
                   <button
                     onClick={() => setUrl(h.url)}
-                    className="flex w-full items-center gap-3 rounded-lg border border-ink-800 bg-ink-900/60 px-4 py-2.5 text-left transition hover:border-accent/40"
+                    className="flex w-full items-center gap-3 rounded-2xl bg-surface px-5 py-3 text-left transition hover:bg-hairline/40"
                   >
                     <span
-                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${PLATFORM_BADGE[h.platform]}`}
+                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${PLATFORM_BADGE[h.platform]}`}
                     >
                       {PLATFORM_LABELS[h.platform]}
                     </span>
-                    <span className="truncate text-sm text-zinc-300">
-                      {h.title}
-                    </span>
+                    <span className="truncate text-[14px]">{h.title}</span>
                   </button>
                 </li>
               ))}
@@ -343,27 +340,24 @@ export default function Home() {
         )}
 
         {!result && !loading && (
-          <section className="mt-14 grid gap-4 sm:grid-cols-3">
+          <section className="mt-16 grid gap-3 sm:grid-cols-3">
             {[
               {
-                title: "Whisper transcripts",
-                body: "Accurate, timestamped speech-to-text for any public video, in any language.",
+                title: "Transcripts",
+                body: "Accurate, timestamped speech-to-text in any language.",
               },
               {
-                title: "MP4 & MP3 downloads",
-                body: "Save the video at the quality you pick, or just the audio as an MP3.",
+                title: "Downloads",
+                body: "Save the video in your chosen quality, or audio as MP3.",
               },
               {
-                title: "Subtitle-ready",
-                body: "Export .srt files that drop straight into editors and video players.",
+                title: "Subtitles",
+                body: "Export .srt files ready for editors and players.",
               },
             ].map((f) => (
-              <div
-                key={f.title}
-                className="rounded-xl border border-ink-800 bg-ink-900/60 p-5"
-              >
-                <h3 className="font-semibold text-zinc-200">{f.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+              <div key={f.title} className="rounded-2xl bg-surface p-6">
+                <h3 className="text-[15px] font-semibold">{f.title}</h3>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
                   {f.body}
                 </p>
               </div>
@@ -372,8 +366,8 @@ export default function Home() {
         )}
       </main>
 
-      <footer className="border-t border-ink-800 py-6 text-center text-xs text-zinc-600">
-        cwapa · transcriber today, video agent tomorrow
+      <footer className="border-t border-hairline/60 py-6 text-center text-[12px] text-muted">
+        cwapa — transcriber today, video agent tomorrow
       </footer>
     </div>
   );

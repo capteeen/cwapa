@@ -3,14 +3,11 @@
 @tailwind utilities;
 
 body {
-  @apply bg-ink-950 text-zinc-100 antialiased;
-  background-image: radial-gradient(
-      ellipse 80% 50% at 50% -10%,
-      rgba(139, 92, 246, 0.18),
-      transparent
-    );
+  @apply bg-white text-ink antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.4);
+  background: rgba(0, 113, 227, 0.18);
 }
