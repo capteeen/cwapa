@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-const YT_DLP = process.env.YT_DLP_PATH || "yt-dlp";
+export const YT_DLP = process.env.YT_DLP_PATH || "yt-dlp";
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 const MAX_DURATION_SECONDS = Number(process.env.MAX_VIDEO_SECONDS || 3600);
 
@@ -25,11 +26,32 @@ export class TranscribeError extends Error {
   }
 }
 
-function commonArgs(): string[] {
-  const args = ["--no-playlist", "--no-warnings"];
-  // Optional cookies file for Instagram (often requires login) or age-gated content.
+let cookiesPath: string | null | undefined;
+
+/**
+ * Cookies can come as a file path (YT_DLP_COOKIES) or, for hosts like Railway
+ * where adding files is awkward, as base64 content (YT_DLP_COOKIES_B64) that
+ * we materialize into a temp file once.
+ */
+function resolveCookies(): string | null {
+  if (cookiesPath !== undefined) return cookiesPath;
   if (process.env.YT_DLP_COOKIES) {
-    args.push("--cookies", process.env.YT_DLP_COOKIES);
+    cookiesPath = process.env.YT_DLP_COOKIES;
+  } else if (process.env.YT_DLP_COOKIES_B64) {
+    const p = path.join(tmpdir(), "cwapa-cookies.txt");
+    writeFileSync(p, Buffer.from(process.env.YT_DLP_COOKIES_B64, "base64"));
+    cookiesPath = p;
+  } else {
+    cookiesPath = null;
+  }
+  return cookiesPath;
+}
+
+export function commonArgs(): string[] {
+  const args = ["--no-playlist", "--no-warnings"];
+  const cookies = resolveCookies();
+  if (cookies) {
+    args.push("--cookies", cookies);
   }
   return args;
 }
