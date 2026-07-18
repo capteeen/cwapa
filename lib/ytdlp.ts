@@ -79,10 +79,15 @@ export function shouldRotateClient(stderr: string): boolean {
 
 export function commonArgs(url?: string, clientSet = 0): string[] {
   const args = ["--no-playlist", "--no-warnings"];
-  if (url && detectPlatform(url) === "youtube") {
-    args.push("--extractor-args", YT_CLIENT_SETS[Math.min(clientSet, YT_CLIENT_SETS.length - 1)]);
-  }
   const cookies = resolveCookies();
+  if (url && detectPlatform(url) === "youtube") {
+    // Account cookies authenticate yt-dlp's default (web) clients, so with
+    // cookies configured attempt 0 skips the client disguises entirely.
+    const idx = cookies ? clientSet - 1 : clientSet;
+    if (idx >= 0) {
+      args.push("--extractor-args", YT_CLIENT_SETS[Math.min(idx, YT_CLIENT_SETS.length - 1)]);
+    }
+  }
   if (cookies) {
     args.push("--cookies", cookies);
   }
@@ -93,12 +98,15 @@ export function commonArgs(url?: string, clientSet = 0): string[] {
  * Runs yt-dlp, rotating through YouTube player-client sets when a failure
  * looks client-specific (DRM poisoning, bot checks, missing formats).
  */
-async function execYtDlp(
+export async function execYtDlp(
   url: string,
   extraArgs: string[],
   opts: { maxBuffer: number; timeout: number }
 ): Promise<{ stdout: string; stderr: string }> {
-  const attempts = detectPlatform(url) === "youtube" ? YT_CLIENT_SETS.length : 1;
+  const attempts =
+    detectPlatform(url) === "youtube"
+      ? YT_CLIENT_SETS.length + (resolveCookies() ? 1 : 0)
+      : 1;
   let lastErr: any;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -117,7 +125,7 @@ async function execYtDlp(
   throw lastErr;
 }
 
-function explainYtDlpFailure(stderr: string): TranscribeError {
+export function explainYtDlpFailure(stderr: string): TranscribeError {
   const s = stderr.toLowerCase();
   if (s.includes("login required") || s.includes("rate-limit") || s.includes("requested content is not available")) {
     return new TranscribeError(
@@ -130,6 +138,12 @@ function explainYtDlpFailure(stderr: string): TranscribeError {
   }
   if (s.includes("unsupported url")) {
     return new TranscribeError("This URL is not supported.", 422);
+  }
+  if (s.includes("requested format is not available")) {
+    return new TranscribeError(
+      "YouTube didn't offer any usable media formats to this server (anti-bot measure). Adding browser cookies via YT_DLP_COOKIES_CONTENT usually fixes this.",
+      502
+    );
   }
   if (s.includes("drm")) {
     return new TranscribeError(
@@ -188,11 +202,12 @@ export async function downloadAudio(url: string): Promise<Buffer> {
   const dir = await mkdtemp(path.join(tmpdir(), "cwapa-"));
   try {
     try {
-      await execYtDlp(
-        url,
-        ["-f", "bestaudio/best", "-o", path.join(dir, "source.%(ext)s")],
-        { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
-      );
+      // No -f selector: take whatever formats exist (audio-only or full
+      // video, merged if needed) — ffmpeg strips the audio track either way.
+      await execYtDlp(url, ["-o", path.join(dir, "source.%(ext)s")], {
+        maxBuffer: 16 * 1024 * 1024,
+        timeout: 600_000,
+      });
     } catch (err: any) {
       if (err instanceof TranscribeError) throw err;
       throw explainYtDlpFailure(String(err?.stderr || err?.message || ""));
