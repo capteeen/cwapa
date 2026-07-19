@@ -125,8 +125,20 @@ export function shouldRotateClient(stderr: string): boolean {
   );
 }
 
-export function commonArgs(url?: string, clientSet = 0): string[] {
+export function commonArgs(
+  url?: string,
+  clientSet = 0,
+  opts: { skipProxy?: boolean } = {}
+): string[] {
   const args = ["--no-playlist", "--no-warnings"];
+  // Route through a (residential) proxy so requests look like ordinary home
+  // traffic — sidesteps YouTube's datacenter-IP blocking. Works with any
+  // http/https/socks5 proxy string, e.g. IPRoyal:
+  //   http://user:pass@geo.iproyal.com:12321
+  const proxy = process.env.YT_DLP_PROXY;
+  if (proxy && !opts.skipProxy) {
+    args.push("--proxy", proxy);
+  }
   const cookies = resolveCookies();
   if (url && detectPlatform(url) === "youtube") {
     // Account cookies authenticate yt-dlp's default (web) clients, so with
@@ -149,7 +161,7 @@ export function commonArgs(url?: string, clientSet = 0): string[] {
 export async function execYtDlp(
   url: string,
   extraArgs: string[],
-  opts: { maxBuffer: number; timeout: number }
+  opts: { maxBuffer: number; timeout: number; skipProxy?: boolean }
 ): Promise<{ stdout: string; stderr: string }> {
   const attempts =
     detectPlatform(url) === "youtube"
@@ -158,7 +170,11 @@ export async function execYtDlp(
   let lastErr: any;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await execFileAsync(YT_DLP, [...commonArgs(url, i), ...extraArgs, url], opts);
+      return await execFileAsync(
+        YT_DLP,
+        [...commonArgs(url, i, { skipProxy: opts.skipProxy }), ...extraArgs, url],
+        opts
+      );
     } catch (err: any) {
       if (err?.code === "ENOENT") {
         throw new TranscribeError("yt-dlp is not installed on the server. See README for setup.", 500);

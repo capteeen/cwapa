@@ -102,6 +102,9 @@ export async function GET(req: NextRequest) {
       contentType = "audio/mpeg";
       filename = `${safeName}.mp3`;
     } else {
+      // Full-video pulls are large; optionally skip the (per-GB) proxy for
+      // these while keeping it for small audio/metadata requests.
+      const skipProxy = process.env.YT_DLP_PROXY_SKIP_DOWNLOADS === "1";
       await execYtDlp(
         url,
         [
@@ -112,7 +115,7 @@ export async function GET(req: NextRequest) {
           "-o",
           path.join(dir, "video.%(ext)s"),
         ],
-        { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
+        { maxBuffer: 16 * 1024 * 1024, timeout: 600_000, skipProxy }
       );
       const files = await readdir(dir);
       const file = files.find((f) => f.startsWith("video."));
