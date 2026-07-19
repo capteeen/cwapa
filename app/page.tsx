@@ -1,3 +1,4 @@
+import Link from "next/link";
 import TranscriberTool from "@/components/TranscriberTool";
 
 export default function Home() {
@@ -41,6 +42,25 @@ export default function Home() {
             </p>
           </div>
         ))}
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-2xl bg-ink p-8 text-white">
+        <p className="text-[13px] font-semibold uppercase tracking-wide text-accent-soft/90 text-[#6ea8ff]">
+          For clippers
+        </p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+          Find clips with unexpected precision.
+        </h2>
+        <p className="mt-2 max-w-md text-[14px] leading-relaxed text-white/70">
+          Describe the moment you want in plain English — cwapa finds it and cuts
+          the clip for you, ready to post.
+        </p>
+        <Link
+          href="/clip"
+          className="mt-5 inline-block rounded-full bg-white px-6 py-2.5 text-[14px] font-medium text-ink transition hover:bg-white/90"
+        >
+          Open Clip Finder →
+        </Link>
       </section>
     </main>
   );
