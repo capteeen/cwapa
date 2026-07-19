@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookiesStatus, saveCookies } from "@/lib/ytdlp";
 
 export const runtime = "nodejs";
+// Read env at request time (the GET status must not be prerendered/cached).
+export const dynamic = "force-dynamic";
 
 function authorized(req: NextRequest): boolean {
   const expected = process.env.ADMIN_TOKEN;
