@@ -71,7 +71,7 @@ const COMPARISON: { section: string; rows: [string, Cell, Cell, Cell][] }[] = [
     section: "AI",
     rows: [
       ["AI summaries", "5 / month", "Unlimited", "Unlimited"],
-      ["Translation (coming soon)", false, "100+ languages", "100+ languages"],
+      ["Transcript translation", "10 languages", "10 languages", "10 languages"],
       ["Transcript library & search (coming soon)", false, true, true],
     ],
   },
