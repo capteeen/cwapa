@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { detectPlatform, PLATFORM_LABELS, type Platform } from "@/lib/platform";
 import { formatClock, toSrt } from "@/lib/format";
 import type { TranscriptResult } from "@/lib/whisper";
+import { TRANSLATION_LANGUAGES } from "@/lib/languages";
 
 interface ApiResponse {
   platform: Platform | null;
@@ -61,6 +62,10 @@ export default function TranscriberTool({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [summarizing, setSummarizing] = useState(false);
+  const [translation, setTranslation] = useState<string | null>(null);
+  const [targetLanguage, setTargetLanguage] = useState("en");
+  const [translating, setTranslating] = useState(false);
+  const [translationCopied, setTranslationCopied] = useState(false);
   const [momentQuery, setMomentQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [moments, setMoments] = useState<
@@ -101,6 +106,7 @@ export default function TranscriberTool({
     setError(null);
     setResult(null);
     setSummary(null);
+    setTranslation(null);
     setMoments(null);
     setMomentQuery("");
     try {
@@ -189,6 +195,47 @@ export default function TranscriberTool({
     } finally {
       setSearching(false);
     }
+  }
+
+  async function translate() {
+    if (!result || translating) return;
+    setTranslating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: result.transcript.text,
+          targetLanguage,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "Translation failed.");
+      else setTranslation(data.translation);
+    } catch {
+      setError("Could not reach the server.");
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  async function copyTranslation() {
+    if (!translation) return;
+    await navigator.clipboard.writeText(translation);
+    setTranslationCopied(true);
+    setTimeout(() => setTranslationCopied(false), 1500);
+  }
+
+  function downloadTranslation() {
+    if (!result || !translation) return;
+    const blob = new Blob([translation], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    const safeTitle = result.meta.title.replace(/[^\w\d -]+/g, "").slice(0, 50) || "transcript";
+    a.download = `${safeTitle}-${targetLanguage}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   function momentLink(start: number): string | null {
@@ -401,9 +448,65 @@ export default function TranscriberTool({
             </label>
           </div>
 
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-hairline/60 p-2 pl-4">
+            <span className="text-[13px] font-medium text-muted">Translate to</span>
+            <select
+              value={targetLanguage}
+              onChange={(e) => {
+                setTargetLanguage(e.target.value);
+                setTranslation(null);
+              }}
+              className="min-w-32 flex-1 appearance-none bg-transparent px-2 py-2 text-[13px] font-medium outline-none sm:flex-none"
+              aria-label="Translation language"
+            >
+              {TRANSLATION_LANGUAGES.map((language) => (
+                <option key={language.code} value={language.code}>
+                  {language.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={translate}
+              disabled={translating}
+              className="rounded-full bg-ink px-5 py-2 text-[13px] font-medium text-white transition hover:bg-ink/85 disabled:opacity-40"
+            >
+              {translating ? "Translating…" : translation ? "Translate again" : "Translate"}
+            </button>
+          </div>
+
           {summary && (
             <div className="mt-4 whitespace-pre-wrap rounded-2xl bg-accent/5 p-6 text-[14px] leading-relaxed">
               {summary}
+            </div>
+          )}
+
+          {translation && (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-hairline/60">
+              <div className="flex items-center justify-between border-b border-hairline/60 bg-surface/70 px-5 py-3">
+                <p className="text-[13px] font-semibold">
+                  {TRANSLATION_LANGUAGES.find((language) => language.code === targetLanguage)?.name} translation
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={copyTranslation}
+                    className="text-[12px] font-medium text-accent hover:underline"
+                  >
+                    {translationCopied ? "Copied ✓" : "Copy"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadTranslation}
+                    className="text-[12px] font-medium text-accent hover:underline"
+                  >
+                    Download
+                  </button>
+                </div>
+              </div>
+              <p className="whitespace-pre-wrap p-6 text-[15px] leading-relaxed">
+                {translation}
+              </p>
             </div>
           )}
 

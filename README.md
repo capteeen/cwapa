@@ -46,6 +46,8 @@ docker run -p 3000:3000 -e OPENAI_API_KEY=sk-... cwapa
 | `OPENAI_API_KEY` | — | API key for the Whisper provider (required for TikTok/Instagram) |
 | `WHISPER_API_URL` | OpenAI's endpoint | Any OpenAI-compatible transcription endpoint (e.g. Groq) |
 | `WHISPER_MODEL` | `whisper-1` (`whisper-large-v3-turbo` on Groq) | Whisper model name |
+| `LLM_API_URL` | Provider chat-completions endpoint | Optional OpenAI-compatible endpoint used for summaries, moment search, and translation |
+| `LLM_MODEL` | `gpt-4o-mini` (OpenAI) or `llama-3.3-70b-versatile` (Groq) | Model used for AI text features |
 | `YT_DLP_PATH` | `yt-dlp` | Path to the yt-dlp binary |
 | `FFMPEG_PATH` | `ffmpeg` | Path to the ffmpeg binary |
 | `MAX_VIDEO_SECONDS` | `3600` | Reject videos longer than this |
@@ -87,4 +89,5 @@ Next to the Transcribe button there's a **Download MP4** button that saves the v
 - [x] URL → transcript for TikTok / YouTube / Instagram
 - [ ] Summaries, chapters & content repurposing (the "video agent")
 - [ ] Batch transcription & history
-- [ ] Speaker labels / translation
+- [ ] Speaker labels
+- [x] Transcript translation (10 languages)
