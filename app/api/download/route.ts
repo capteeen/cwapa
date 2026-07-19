@@ -17,6 +17,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 import { guard } from "@/lib/ratelimit";
+import { recordProxyBytes } from "@/lib/usage";
 
 const execFileAsync = promisify(execFile);
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
@@ -73,12 +74,13 @@ export async function GET(req: NextRequest) {
     let filename: string;
 
     if (format === "mp3") {
-      // Grab whatever media exists, then let ffmpeg pull a listening-quality
-      // mp3 out of it.
-      await execYtDlp(url, ["-o", path.join(dir, "source.%(ext)s")], {
-        maxBuffer: 16 * 1024 * 1024,
-        timeout: 600_000,
-      });
+      // Audio-only (not the full video) — good quality without wasting proxy
+      // bandwidth on the video track — then ffmpeg makes a 192k mp3.
+      await execYtDlp(
+        url,
+        ["-f", "bestaudio/best", "-o", path.join(dir, "source.%(ext)s")],
+        { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
+      );
       const files = await readdir(dir);
       let source: string | null = null;
       let sourceSize = 0;
@@ -93,6 +95,7 @@ export async function GET(req: NextRequest) {
         await cleanup();
         return NextResponse.json({ error: "Download produced no file." }, { status: 502 });
       }
+      recordProxyBytes(sourceSize); // mp3 audio pull goes via proxy
       filePath = path.join(dir, "audio.mp3");
       await execFileAsync(
         FFMPEG,

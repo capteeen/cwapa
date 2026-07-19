@@ -1,6 +1,24 @@
 let lastAlert = 0;
 const THROTTLE_MS = Number(process.env.ALERT_THROTTLE_MS || 60 * 60 * 1000); // 1h
 
+function post(message: string): void {
+  const url = process.env.ALERT_WEBHOOK_URL;
+  if (!url) return;
+  // Discord expects { content }, Slack expects { text }; send both.
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: message, text: message }),
+  }).catch(() => {
+    /* alerting is best-effort */
+  });
+}
+
+/** Usage/budget alerts — deduped by the caller, so no throttle here. */
+export function notifyUsage(detail: string): void {
+  post(`📊 cwapa: ${detail}`);
+}
+
 /**
  * Fire-and-forget alert to a Discord/Slack-compatible incoming webhook when
  * YouTube blocks a download (usually meaning the cookies need refreshing).
@@ -14,12 +32,5 @@ export function notifyCookieIssue(detail: string): void {
   lastAlert = now;
 
   const message = `⚠️ cwapa: YouTube blocked a download — your cookies likely need refreshing. Update them at /admin/cookies. (${detail})`;
-  // Discord expects { content }, Slack expects { text }; send both.
-  fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content: message, text: message }),
-  }).catch(() => {
-    /* alerting is best-effort */
-  });
+  post(message);
 }

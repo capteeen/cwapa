@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ProxyAgent, request } from "undici";
 import { cookiesStatus, fetchMeta } from "@/lib/ytdlp";
+import { usageStatus } from "@/lib/usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -82,6 +83,7 @@ export async function GET(req: NextRequest) {
     proxy: proxyStatus(),
     skipProxyOnDownloads: process.env.YT_DLP_PROXY_SKIP_DOWNLOADS === "1",
     cookies: cookiesStatus(),
+    usage: usageStatus(),
   };
 
   const egress = await egressIps();

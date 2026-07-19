@@ -13,6 +13,7 @@ import {
   fetchMeta,
 } from "@/lib/ytdlp";
 import { guard } from "@/lib/ratelimit";
+import { recordProxyBytes } from "@/lib/usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -82,6 +83,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Clip extraction produced no file." }, { status: 502 });
     }
     const rawPath = path.join(dir, raw);
+    // The raw clip segment came down through the proxy (clips aren't skipped).
+    recordProxyBytes((await stat(rawPath)).size);
 
     let filePath = rawPath;
     let contentType = "video/mp4";
