@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { detectPlatform } from "./platform";
+import { notifyCookieIssue } from "./alert";
 
 const execFileAsync = promisify(execFile);
 
@@ -28,28 +29,75 @@ export class TranscribeError extends Error {
 }
 
 let cookiesPath: string | null | undefined;
+let cookiesUpdatedAt: number | null = null;
 
 /**
- * Cookies can come as a file path (YT_DLP_COOKIES) or, for hosts like Railway
- * where adding files is awkward, as base64 content (YT_DLP_COOKIES_B64) that
- * we materialize into a temp file once.
+ * The writable cookie store. yt-dlp is given this path for both reading AND
+ * writing, so the refreshed session cookies it receives on each successful
+ * request are written back here — extending cookie life automatically.
+ * Point COOKIES_STORE_PATH at a Railway volume (e.g. /data/cookies.txt) to
+ * make that renewal survive restarts; otherwise it lives in /tmp for the
+ * lifetime of the deploy.
+ */
+function storePath(): string {
+  return process.env.COOKIES_STORE_PATH || path.join(tmpdir(), "cwapa-cookies.txt");
+}
+
+function seedFromEnv(dest: string): boolean {
+  if (process.env.YT_DLP_COOKIES_CONTENT) {
+    writeFileSync(dest, process.env.YT_DLP_COOKIES_CONTENT);
+    return true;
+  }
+  if (process.env.YT_DLP_COOKIES_B64) {
+    writeFileSync(dest, Buffer.from(process.env.YT_DLP_COOKIES_B64, "base64"));
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Cookies can come as an external file path (YT_DLP_COOKIES, read-only), or be
+ * materialized into the writable store from env content, or be uploaded at
+ * runtime via saveCookies().
  */
 function resolveCookies(): string | null {
   if (cookiesPath !== undefined) return cookiesPath;
+
+  // An explicit external file wins and is used read-only.
   if (process.env.YT_DLP_COOKIES) {
     cookiesPath = process.env.YT_DLP_COOKIES;
-  } else if (process.env.YT_DLP_COOKIES_B64) {
-    const p = path.join(tmpdir(), "cwapa-cookies.txt");
-    writeFileSync(p, Buffer.from(process.env.YT_DLP_COOKIES_B64, "base64"));
-    cookiesPath = p;
-  } else if (process.env.YT_DLP_COOKIES_CONTENT) {
-    const p = path.join(tmpdir(), "cwapa-cookies.txt");
-    writeFileSync(p, process.env.YT_DLP_COOKIES_CONTENT);
-    cookiesPath = p;
-  } else {
-    cookiesPath = null;
+    return cookiesPath;
   }
+
+  const store = storePath();
+  try {
+    if (existsSync(store) && statSync(store).size > 0) {
+      cookiesPath = store;
+      return cookiesPath;
+    }
+    mkdirSync(path.dirname(store), { recursive: true });
+    if (seedFromEnv(store)) {
+      cookiesPath = store;
+      return cookiesPath;
+    }
+  } catch {
+    /* fall through to no-cookies */
+  }
+  cookiesPath = null;
   return cookiesPath;
+}
+
+/** Replace the cookie store at runtime (used by the admin endpoint). */
+export function saveCookies(content: string): void {
+  const store = storePath();
+  mkdirSync(path.dirname(store), { recursive: true });
+  writeFileSync(store, content);
+  cookiesPath = store;
+  cookiesUpdatedAt = Date.now();
+}
+
+export function cookiesStatus(): { configured: boolean; updatedAt: number | null } {
+  return { configured: resolveCookies() !== null, updatedAt: cookiesUpdatedAt };
 }
 
 /**
@@ -140,18 +188,21 @@ export function explainYtDlpFailure(stderr: string): TranscribeError {
     return new TranscribeError("This URL is not supported.", 422);
   }
   if (s.includes("requested format is not available")) {
+    notifyCookieIssue("no usable formats offered");
     return new TranscribeError(
       "YouTube didn't offer any usable media formats to this server (anti-bot measure). Adding browser cookies via YT_DLP_COOKIES_CONTENT usually fixes this.",
       502
     );
   }
   if (s.includes("drm")) {
+    notifyCookieIssue("DRM-only formats served");
     return new TranscribeError(
       "YouTube is serving this video in a locked (DRM) form to this server — an anti-bot measure, tried multiple workarounds. Adding browser cookies via YT_DLP_COOKIES_CONTENT usually resolves it.",
       502
     );
   }
   if (s.includes("sign in to confirm") || s.includes("not a bot") || s.includes("403")) {
+    notifyCookieIssue("bot check / sign-in wall");
     return new TranscribeError(
       "The platform is blocking downloads from this server's IP (bot check). Add exported browser cookies via the YT_DLP_COOKIES_CONTENT environment variable to get past it.",
       502
