@@ -1,11 +1,31 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
+const description =
+  "Paste a TikTok, YouTube, or Instagram link — or upload a file — and get a clean, timestamped transcript with AI summary. Find and cut clips in plain English, and download videos as MP4 or MP3.";
+
 export const metadata: Metadata = {
-  title: "cwapa — AI video transcriber & downloader",
-  description:
-    "Paste a TikTok, YouTube, or Instagram link — or upload a file — and get a clean, timestamped transcript with AI summary. Download videos as MP4 or MP3.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "cwapa — AI video transcriber, clip finder & downloader",
+    template: "%s",
+  },
+  description,
+  applicationName: SITE_NAME,
+  openGraph: {
+    title: "cwapa — AI video transcriber, clip finder & downloader",
+    description,
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "cwapa — AI video transcriber, clip finder & downloader",
+    description,
+  },
 };
 
 export default function RootLayout({
