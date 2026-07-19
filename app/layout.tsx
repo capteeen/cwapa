@@ -40,17 +40,20 @@ export default function RootLayout({
               <Link href="/" className="text-lg font-semibold tracking-tight">
                 cwapa
               </Link>
-              <div className="flex items-center gap-6 text-[14px]">
+              <div className="flex items-center gap-3 text-[13px] sm:gap-6 sm:text-[14px]">
+                <Link href="/studio" className="text-muted transition hover:text-ink">
+                  Caption Studio
+                </Link>
                 <Link href="/clip" className="text-muted transition hover:text-ink">
                   Clip Finder
                 </Link>
-                <Link href="/tools" className="text-muted transition hover:text-ink">
+                <Link href="/tools" className="hidden text-muted transition hover:text-ink sm:block">
                   Tools
                 </Link>
                 <Link href="/pricing" className="text-muted transition hover:text-ink">
                   Pricing
                 </Link>
-                <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted">
+                <span className="hidden rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted md:block">
                   Beta
                 </span>
               </div>

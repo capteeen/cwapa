@@ -1,6 +1,6 @@
 # cwapa
 
-**cwapa** transcribes TikTok, YouTube, and Instagram videos. Paste a link, get a clean, timestamped transcript you can copy or download as `.txt` / `.srt`.
+**cwapa** transcribes TikTok, YouTube, and Instagram videos. Paste a link, get a clean, timestamped transcript, then edit, style, and burn captions into the video.
 
 > Transcriber today, video agent tomorrow — this is the first building block.
 
@@ -91,3 +91,4 @@ Next to the Transcribe button there's a **Download MP4** button that saves the v
 - [ ] Batch transcription & history
 - [ ] Speaker labels
 - [x] Transcript translation (10 languages)
+- [x] Subtitle & Caption Studio with SRT, VTT, and hard-burned MP4 export
