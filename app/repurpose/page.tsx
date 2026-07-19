@@ -1,0 +1,5 @@
+import type { Metadata } from "next";
+import ContentRepurposer from "@/components/ContentRepurposer";
+
+export const metadata: Metadata = { title: "AI Content Repurposer | cwapa", description: "Turn one video transcript into TikTok captions, X threads, LinkedIn posts, hooks, and titles." };
+export default function RepurposePage() { return <main className="min-h-screen bg-[radial-gradient(circle_at_10%_0%,rgba(0,113,227,.1),transparent_30%),radial-gradient(circle_at_90%_20%,rgba(112,68,255,.08),transparent_28%),#f7f8fa] px-4 py-12 sm:px-6 sm:py-16"><header className="mx-auto mb-10 max-w-3xl text-center"><span className="inline-flex rounded-full border border-accent/15 bg-white/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[.18em] text-accent shadow-sm">Content Repurposer</span><h1 className="mt-5 text-4xl font-semibold tracking-[-.045em] sm:text-6xl">Your transcript has more to say.</h1><p className="mx-auto mt-4 max-w-2xl text-[15px] leading-7 text-muted">Turn one recording into channel-ready content without losing your voice, facts, or point of view.</p></header><ContentRepurposer /></main>; }
