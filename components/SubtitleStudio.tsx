@@ -12,6 +12,7 @@ import {
 } from "@/lib/subtitles";
 import type { TranscriptSegment } from "@/lib/whisper";
 import { formatClock } from "@/lib/format";
+import { saveTranscriptProject } from "@/lib/library";
 
 interface StudioMeta {
   title: string;
@@ -54,8 +55,8 @@ function currentWordIndex(segment: TranscriptSegment, time: number): number {
   return words.length - 1;
 }
 
-export default function SubtitleStudio() {
-  const [url, setUrl] = useState("");
+export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: string }) {
+  const [url, setUrl] = useState(defaultUrl);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<StudioMeta | null>(null);
@@ -65,6 +66,8 @@ export default function SubtitleStudio() {
   const [rendering, setRendering] = useState(false);
   const [renderStage, setRenderStage] = useState(0);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const segmentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
@@ -178,6 +181,30 @@ export default function SubtitleStudio() {
     }
   }
 
+  async function saveToLibrary() {
+    if (!meta || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const id = await saveTranscriptProject({
+        title: meta.title,
+        sourceUrl: url.trim(),
+        platform: detectPlatform(url),
+        durationSeconds: meta.durationSeconds,
+        thumbnailUrl: meta.thumbnail,
+        language: null,
+        text: segments.map((segment) => segment.text).join(" "),
+        segments,
+      });
+      setSavedProjectId(id);
+      setDirty(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save this project.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!meta) {
     return (
       <div className="mx-auto max-w-2xl">
@@ -230,6 +257,7 @@ export default function SubtitleStudio() {
           <p className="mt-0.5 text-[11px] text-white/45">{segments.length} captions · {formatClock(duration)} {dirty ? "· Edited" : "· Synced"}</p>
         </div>
         <div className="flex items-center gap-2">
+          {savedProjectId ? <a href={`/library/${savedProjectId}`} className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-2 text-[12px] font-medium text-emerald-300">Saved ✓</a> : <button onClick={saveToLibrary} disabled={saving} className="rounded-full border border-white/15 px-3.5 py-2 text-[12px] font-medium text-white/75 transition hover:bg-white/10 disabled:opacity-40">{saving ? "Saving…" : "Save"}</button>}
           <button onClick={() => downloadText("srt")} className="rounded-full border border-white/15 px-3.5 py-2 text-[12px] font-medium text-white/75 transition hover:bg-white/10">SRT</button>
           <button onClick={() => downloadText("vtt")} className="rounded-full border border-white/15 px-3.5 py-2 text-[12px] font-medium text-white/75 transition hover:bg-white/10">VTT</button>
           <button onClick={renderVideo} disabled={rendering} className="rounded-full bg-white px-5 py-2 text-[12px] font-semibold text-black transition hover:bg-white/90 disabled:opacity-50">

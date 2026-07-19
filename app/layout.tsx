@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
+import AccountNav from "@/components/AccountNav";
 
 const description =
   "Paste a TikTok, YouTube, or Instagram link — or upload a file — and get a clean, timestamped transcript with AI summary. Find and cut clips in plain English, and download videos as MP4 or MP3.";
@@ -53,9 +54,7 @@ export default function RootLayout({
                 <Link href="/pricing" className="text-muted transition hover:text-ink">
                   Pricing
                 </Link>
-                <span className="hidden rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted md:block">
-                  Beta
-                </span>
+                <AccountNav />
               </div>
             </div>
           </nav>

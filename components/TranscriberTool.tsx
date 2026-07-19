@@ -5,6 +5,7 @@ import { detectPlatform, PLATFORM_LABELS, type Platform } from "@/lib/platform";
 import { formatClock, toSrt } from "@/lib/format";
 import type { TranscriptResult } from "@/lib/whisper";
 import { TRANSLATION_LANGUAGES } from "@/lib/languages";
+import { saveTranscriptProject } from "@/lib/library";
 
 interface ApiResponse {
   platform: Platform | null;
@@ -66,6 +67,8 @@ export default function TranscriberTool({
   const [targetLanguage, setTargetLanguage] = useState("en");
   const [translating, setTranslating] = useState(false);
   const [translationCopied, setTranslationCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
   const [momentQuery, setMomentQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [moments, setMoments] = useState<
@@ -107,6 +110,7 @@ export default function TranscriberTool({
     setResult(null);
     setSummary(null);
     setTranslation(null);
+    setSavedProjectId(null);
     setMoments(null);
     setMomentQuery("");
     try {
@@ -194,6 +198,29 @@ export default function TranscriberTool({
       setError("Could not reach the server.");
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function saveToLibrary() {
+    if (!result || saving || mode !== "link") return;
+    setSaving(true);
+    setError(null);
+    try {
+      const id = await saveTranscriptProject({
+        title: result.meta.title,
+        sourceUrl: result.meta.webpageUrl || url.trim(),
+        platform: result.platform,
+        durationSeconds: result.meta.durationSeconds,
+        thumbnailUrl: result.meta.thumbnail,
+        language: result.transcript.language,
+        text: result.transcript.text,
+        segments: result.transcript.segments,
+      });
+      setSavedProjectId(id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save this project.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -411,6 +438,13 @@ export default function TranscriberTool({
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-2">
+            {mode === "link" && (
+              savedProjectId ? (
+                <a href={`/library/${savedProjectId}`} className="rounded-full bg-emerald-50 px-4 py-2 text-[13px] font-medium text-emerald-700">Saved ✓</a>
+              ) : (
+                <button onClick={saveToLibrary} disabled={saving} className="rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-white transition hover:bg-black disabled:opacity-40">{saving ? "Saving…" : "Save to library"}</button>
+              )
+            )}
             <button
               onClick={summarize}
               disabled={summarizing}
