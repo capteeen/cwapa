@@ -11,3 +11,54 @@ body {
 ::selection {
   background: rgba(0, 113, 227, 0.18);
 }
+
+@keyframes studio-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes studio-orbit-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+@keyframes studio-render-progress {
+  0% { width: 4%; transform: translateX(-100%); }
+  55% { width: 55%; }
+  100% { width: 22%; transform: translateX(470%); }
+}
+
+.studio-orbit,
+.studio-render-mark {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  animation: studio-orbit-spin 2.2s linear infinite;
+}
+
+.studio-orbit span,
+.studio-render-mark span {
+  position: absolute;
+  left: 22px;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #0071e3;
+  transform-origin: 5px 27px;
+  animation: studio-orbit-pulse 1.2s ease-in-out infinite;
+}
+
+.studio-orbit span:nth-child(2),
+.studio-render-mark span:nth-child(2) { transform: rotate(120deg); animation-delay: -0.4s; }
+.studio-orbit span:nth-child(3),
+.studio-render-mark span:nth-child(3) { transform: rotate(240deg); animation-delay: -0.8s; }
+.studio-render-mark span { background: white; box-shadow: 0 0 22px rgba(255,255,255,.45); }
+.studio-render-progress { animation: studio-render-progress 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-orbit,
+  .studio-render-mark,
+  .studio-orbit span,
+  .studio-render-mark span,
+  .studio-render-progress { animation: none; }
+}

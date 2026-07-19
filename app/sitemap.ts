@@ -4,7 +4,7 @@ import { TOOL_PAGES } from "@/lib/tools";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
-  const staticRoutes = ["", "/clip", "/tools", "/pricing"].map((p) => ({
+  const staticRoutes = ["", "/studio", "/clip", "/tools", "/pricing"].map((p) => ({
     url: `${SITE_URL}${p}`,
     lastModified: now,
     changeFrequency: "weekly" as const,
