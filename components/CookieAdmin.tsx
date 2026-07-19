@@ -30,10 +30,25 @@ export default function CookieAdmin() {
         const c = data.config.cookies.configured
           ? "Cookies: ON"
           : "Cookies: OFF";
+        const eg = data.egress ?? {};
+        const egLines: string[] = [];
+        egLines.push(`Server IP (direct): ${eg.direct ?? "unknown"}`);
+        if (data.config.proxy.configured) {
+          if (eg.throughProxy) {
+            const routed = eg.throughProxy !== eg.direct;
+            egLines.push(
+              `Server IP (via proxy): ${eg.throughProxy} ${
+                routed ? "✅ proxy IS routing" : "⚠️ same as direct — proxy NOT routing"
+              }`
+            );
+          } else {
+            egLines.push(`Server IP (via proxy): FAILED — ${eg.proxyError ?? "no response"}`);
+          }
+        }
         const t = data.test.ok
           ? `✅ Live YouTube test PASSED — fetched "${data.test.title}" (${data.tookMs} ms)`
           : `❌ Live YouTube test FAILED — ${data.test.error}`;
-        setDiagnosis([p, c, t].join("\n"));
+        setDiagnosis([p, c, ...egLines, t].join("\n"));
       }
     } catch {
       setDiagnosis("Could not reach the server.");
