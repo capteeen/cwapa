@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { detectPlatform } from "./platform";
 import { notifyCookieIssue } from "./alert";
+import { recordProxyBytes } from "./usage";
 
 const execFileAsync = promisify(execFile);
 
@@ -269,12 +270,15 @@ export async function downloadAudio(url: string): Promise<Buffer> {
   const dir = await mkdtemp(path.join(tmpdir(), "cwapa-"));
   try {
     try {
-      // No -f selector: take whatever formats exist (audio-only or full
-      // video, merged if needed) — ffmpeg strips the audio track either way.
-      await execYtDlp(url, ["-o", path.join(dir, "source.%(ext)s")], {
-        maxBuffer: 16 * 1024 * 1024,
-        timeout: 600_000,
-      });
+      // Grab the SMALLEST audio-only stream. Whisper resamples to 16 kHz mono
+      // regardless, so low-bitrate audio loses no accuracy — and it slashes
+      // proxy bandwidth vs. pulling the full video just to strip its audio.
+      // Fallbacks: worst audio → any audio → best (rare: combined-only posts).
+      await execYtDlp(
+        url,
+        ["-f", "worstaudio/bestaudio/best", "-o", path.join(dir, "source.%(ext)s")],
+        { maxBuffer: 16 * 1024 * 1024, timeout: 600_000 }
+      );
     } catch (err: any) {
       if (err instanceof TranscribeError) throw err;
       throw explainYtDlpFailure(String(err?.stderr || err?.message || ""));
@@ -294,6 +298,7 @@ export async function downloadAudio(url: string): Promise<Buffer> {
     if (!sourcePath || sourceSize === 0) {
       throw new TranscribeError("The download produced no media file.", 502);
     }
+    recordProxyBytes(sourceSize); // transcription audio always goes via proxy
 
     // If the "media" is actually an HTML/JSON error page, the platform blocked
     // the download (common for datacenter IPs). Fail with a useful message.

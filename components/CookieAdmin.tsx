@@ -45,10 +45,16 @@ export default function CookieAdmin() {
             egLines.push(`Server IP (via proxy): FAILED — ${eg.proxyError ?? "no response"}`);
           }
         }
+        const u = data.config.usage;
+        const uLine = u
+          ? `Proxy usage (${u.month}): ${u.gb} GB${
+              u.capGB ? ` of ${u.capGB} GB budget (${u.pct}%)` : ""
+            }`
+          : "";
         const t = data.test.ok
           ? `✅ Live YouTube test PASSED — fetched "${data.test.title}" (${data.tookMs} ms)`
           : `❌ Live YouTube test FAILED — ${data.test.error}`;
-        setDiagnosis([p, c, ...egLines, t].join("\n"));
+        setDiagnosis([p, c, ...egLines, uLine, t].filter(Boolean).join("\n"));
       }
     } catch {
       setDiagnosis("Could not reach the server.");
