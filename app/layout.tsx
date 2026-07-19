@@ -45,8 +45,8 @@ export default function RootLayout({
                 <Link href="/studio" className="text-muted transition hover:text-ink">
                   Caption Studio
                 </Link>
-                <Link href="/clip" className="text-muted transition hover:text-ink">
-                  Clip Finder
+                <Link href="/repurpose" className="text-muted transition hover:text-ink">
+                  Repurpose
                 </Link>
                 <Link href="/tools" className="hidden text-muted transition hover:text-ink sm:block">
                   Tools
