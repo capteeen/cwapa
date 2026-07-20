@@ -26,14 +26,40 @@ const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 const FONTS = new Set(["Helvetica", "Arial", "Georgia", "Courier New", "Impact"]);
 const ASPECTS = new Set<CaptionAspect>(["9:16", "1:1", "16:9"]);
 const PLACEMENTS = new Set<CaptionPlacement>(["top", "middle", "bottom"]);
+const KARAOKE_MODES = new Set(["off", "fill", "pop", "word"]);
+
+function hexOr(value: any, fallback: string): string {
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
 
 function parseStyle(value: any): CaptionStyle {
-  const font = FONTS.has(value?.font) ? value.font : DEFAULT_CAPTION_STYLE.font;
-  const color = /^#[0-9a-f]{6}$/i.test(value?.color) ? value.color : DEFAULT_CAPTION_STYLE.color;
-  const size = Math.min(96, Math.max(28, Number(value?.size) || DEFAULT_CAPTION_STYLE.size));
-  const placement = PLACEMENTS.has(value?.placement) ? value.placement : DEFAULT_CAPTION_STYLE.placement;
-  const aspect = ASPECTS.has(value?.aspect) ? value.aspect : DEFAULT_CAPTION_STYLE.aspect;
-  return { font, color, size, placement, aspect, karaoke: value?.karaoke !== false };
+  const d = DEFAULT_CAPTION_STYLE;
+  // Legacy clients sent karaoke as a boolean.
+  const karaoke = KARAOKE_MODES.has(value?.karaoke)
+    ? value.karaoke
+    : value?.karaoke === false
+      ? "off"
+      : value?.karaoke === true
+        ? "fill"
+        : d.karaoke;
+  return {
+    preset: typeof value?.preset === "string" ? value.preset.slice(0, 32) : d.preset,
+    font: FONTS.has(value?.font) ? value.font : d.font,
+    color: hexOr(value?.color, d.color),
+    highlightColor: hexOr(value?.highlightColor, d.highlightColor),
+    size: Math.min(120, Math.max(28, Number(value?.size) || d.size)),
+    placement: PLACEMENTS.has(value?.placement) ? value.placement : d.placement,
+    aspect: ASPECTS.has(value?.aspect) ? value.aspect : d.aspect,
+    karaoke,
+    uppercase: value?.uppercase === true,
+    bold: value?.bold !== false,
+    outline: Math.min(8, Math.max(0, Number(value?.outline) ?? d.outline)),
+    outlineColor: hexOr(value?.outlineColor, d.outlineColor),
+    shadow: Math.min(6, Math.max(0, Number(value?.shadow) ?? d.shadow)),
+    box: value?.box === true,
+    boxColor: hexOr(value?.boxColor, d.boxColor),
+    glow: value?.glow === true,
+  };
 }
 
 export async function POST(req: NextRequest) {

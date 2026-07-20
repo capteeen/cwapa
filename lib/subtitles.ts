@@ -2,23 +2,51 @@ import type { TranscriptSegment } from "./whisper";
 
 export type CaptionAspect = "9:16" | "1:1" | "16:9";
 export type CaptionPlacement = "top" | "middle" | "bottom";
+export type CaptionFont = "Helvetica" | "Arial" | "Georgia" | "Courier New" | "Impact";
+/**
+ * off   — static text
+ * fill  — classic karaoke sweep across each word (\kf)
+ * pop   — each word snaps to the highlight color as it is spoken (\k)
+ * word  — one word on screen at a time (per-word events)
+ */
+export type KaraokeMode = "off" | "fill" | "pop" | "word";
 
 export interface CaptionStyle {
-  font: "Helvetica" | "Arial" | "Georgia" | "Courier New" | "Impact";
+  preset: string;
+  font: CaptionFont;
   color: string;
+  highlightColor: string;
   size: number;
   placement: CaptionPlacement;
   aspect: CaptionAspect;
-  karaoke: boolean;
+  karaoke: KaraokeMode;
+  uppercase: boolean;
+  bold: boolean;
+  outline: number;
+  outlineColor: string;
+  shadow: number;
+  box: boolean;
+  boxColor: string;
+  glow: boolean;
 }
 
 export const DEFAULT_CAPTION_STYLE: CaptionStyle = {
+  preset: "clean",
   font: "Helvetica",
   color: "#ffffff",
+  highlightColor: "#5ac8fa",
   size: 54,
   placement: "bottom",
   aspect: "9:16",
-  karaoke: true,
+  karaoke: "fill",
+  uppercase: false,
+  bold: true,
+  outline: 3,
+  outlineColor: "#000000",
+  shadow: 1,
+  box: false,
+  boxColor: "#000000",
+  glow: false,
 };
 
 function milliseconds(seconds: number): number {
@@ -82,23 +110,35 @@ function escapeAss(text: string): string {
     .replace(/\r?\n/g, "\\N");
 }
 
-function karaokeText(segment: TranscriptSegment): string {
+/** Split a segment's duration across its words, weighted by word length. */
+export function wordTimings(
+  segment: TranscriptSegment
+): { word: string; start: number; end: number }[] {
   const words = segment.text.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "";
-  const duration = Math.max(1, Math.round((segment.end - segment.start) * 100));
+  if (words.length === 0) return [];
+  const total = Math.max(0.01, segment.end - segment.start);
   const weights = words.map((word) => Math.max(1, word.replace(/[^\p{L}\p{N}]/gu, "").length));
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
-  let assigned = 0;
+  let cursor = segment.start;
+  return words.map((word, index) => {
+    const span =
+      index === words.length - 1
+        ? segment.end - cursor
+        : (total * weights[index]) / weightTotal;
+    const start = cursor;
+    cursor += span;
+    return { word, start, end: cursor };
+  });
+}
 
-  return words
-    .map((word, index) => {
-      const remaining = duration - assigned;
-      const wordDuration =
-        index === words.length - 1
-          ? remaining
-          : Math.max(1, Math.round((duration * weights[index]) / weightTotal));
-      assigned += wordDuration;
-      return `{\\kf${wordDuration}}${escapeAss(word)}`;
+function karaokeText(segment: TranscriptSegment, tag: "kf" | "k", uppercase: boolean): string {
+  const timings = wordTimings(segment);
+  if (timings.length === 0) return "";
+  return timings
+    .map(({ word, start, end }) => {
+      const centis = Math.max(1, Math.round((end - start) * 100));
+      const text = uppercase ? word.toUpperCase() : word;
+      return `{\\${tag}${centis}}${escapeAss(text)}`;
     })
     .join(" ");
 }
@@ -118,6 +158,16 @@ export function validateSegments(segments: TranscriptSegment[]): TranscriptSegme
   });
 }
 
+// The render container ships Liberation fonts; map the UI font names to
+// metric-compatible faces so exports look like the preview.
+const RENDER_FONTS: Record<CaptionFont, string> = {
+  Helvetica: "Liberation Sans",
+  Arial: "Liberation Sans",
+  Georgia: "Liberation Serif",
+  "Courier New": "Liberation Mono",
+  Impact: "Liberation Sans Narrow",
+};
+
 export function toAss(segments: TranscriptSegment[], style: CaptionStyle): string {
   const dimensions: Record<CaptionAspect, [number, number]> = {
     "9:16": [1080, 1920],
@@ -127,16 +177,45 @@ export function toAss(segments: TranscriptSegment[], style: CaptionStyle): strin
   const [width, height] = dimensions[style.aspect];
   const alignment = style.placement === "top" ? 8 : style.placement === "middle" ? 5 : 2;
   const margin = Math.round(height * 0.08);
-  const primary = assColor(style.color);
-  const secondary = assColor("#ffffff", "88");
-  const fontSize = Math.min(96, Math.max(28, Math.round(style.size)));
+  const fontSize = Math.min(120, Math.max(28, Math.round(style.size)));
+  const fontName = RENDER_FONTS[style.font] ?? "Liberation Sans";
 
-  const events = validateSegments(segments)
-    .map((segment) => {
-      const text = style.karaoke ? karaokeText(segment) : escapeAss(segment.text);
-      return `Dialogue: 0,${assTimestamp(segment.start)},${assTimestamp(segment.end)},Caption,,0,0,0,,${text}`;
-    })
-    .join("\n");
+  // With \kf / \k, sung text uses PrimaryColour and unsung text uses
+  // SecondaryColour — so karaoke modes put the highlight in Primary.
+  const karaokeOn = style.karaoke === "fill" || style.karaoke === "pop";
+  const primary = assColor(karaokeOn ? style.highlightColor : style.color);
+  const secondary = assColor(style.color, karaokeOn ? "20" : "00");
+  const outlineColor = assColor(style.glow ? style.highlightColor : style.outlineColor);
+  const borderStyle = style.box ? 3 : 1;
+  const back = style.box ? assColor(style.boxColor, "1A") : "&H66000000";
+  const outline = Math.min(8, Math.max(0, Math.round(style.outline)));
+  const shadow = Math.min(6, Math.max(0, Math.round(style.shadow)));
+  const bold = style.bold ? -1 : 0;
+  const prefix = style.glow ? "{\\blur6}" : "";
 
-  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nScaledBorderAndShadow: yes\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Caption,${style.font},${fontSize},${primary},${secondary},&HCC000000,&H66000000,-1,0,0,0,100,100,0,0,1,4,1,${alignment},70,70,${margin},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${events}\n`;
+  const valid = validateSegments(segments);
+  const events: string[] = [];
+
+  if (style.karaoke === "word") {
+    for (const segment of valid) {
+      for (const { word, start, end } of wordTimings(segment)) {
+        const text = escapeAss(style.uppercase ? word.toUpperCase() : word);
+        events.push(
+          `Dialogue: 0,${assTimestamp(start)},${assTimestamp(end)},Caption,,0,0,0,,${prefix}${text}`
+        );
+      }
+    }
+  } else {
+    for (const segment of valid) {
+      const text =
+        style.karaoke === "off"
+          ? escapeAss(style.uppercase ? segment.text.toUpperCase() : segment.text)
+          : karaokeText(segment, style.karaoke === "fill" ? "kf" : "k", style.uppercase);
+      events.push(
+        `Dialogue: 0,${assTimestamp(segment.start)},${assTimestamp(segment.end)},Caption,,0,0,0,,${prefix}${text}`
+      );
+    }
+  }
+
+  return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nScaledBorderAndShadow: yes\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Caption,${fontName},${fontSize},${primary},${secondary},${outlineColor},${back},${bold},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignment},70,70,${margin},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n${events.join("\n")}\n`;
 }
