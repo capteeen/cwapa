@@ -69,6 +69,13 @@ test("Impact exports use the condensed font installed in the render image", () =
   assert.match(ass, /Style: Caption,Nimbus Sans Narrow,/);
 });
 
+test("modern caption fonts keep their family names in exported ASS", () => {
+  for (const font of ["Inter", "Roboto", "Open Sans", "Lato", "Comic Neue"] as const) {
+    const ass = toAss(segments, { ...DEFAULT_CAPTION_STYLE, font });
+    assert.match(ass, new RegExp(`Style: Caption,${font},`));
+  }
+});
+
 test("presets apply while preserving canvas and placement", async () => {
   const { CAPTION_PRESETS, applyPreset } = await import("../lib/captionPresets.ts");
   const beast = CAPTION_PRESETS.find((preset) => preset.id === "beast")!;
@@ -80,4 +87,13 @@ test("presets apply while preserving canvas and placement", async () => {
   assert.equal(styled.uppercase, true);
   assert.equal(styled.aspect, "16:9");
   assert.equal(styled.placement, "top");
+});
+
+test("trend presets use unique ids and include readable short-form categories", async () => {
+  const { CAPTION_PRESETS } = await import("../lib/captionPresets.ts");
+  assert.equal(new Set(CAPTION_PRESETS.map((preset) => preset.id)).size, CAPTION_PRESETS.length);
+  assert.ok(CAPTION_PRESETS.length >= 12);
+  for (const id of ["shorts", "podcast", "explainer", "breaking", "playful"]) {
+    assert.ok(CAPTION_PRESETS.some((preset) => preset.id === id));
+  }
 });
