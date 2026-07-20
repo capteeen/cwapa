@@ -11,9 +11,25 @@ export function BrandMark({ className = "h-8 w-8" }: { className?: string }) {
   );
 }
 
-export default function BrandLogo({ inverted = false }: { inverted?: boolean }) {
+export default function BrandLogo({
+  inverted = false,
+  adaptive = false,
+}: {
+  inverted?: boolean;
+  adaptive?: boolean;
+}) {
+  const foreground = adaptive
+    ? "text-white mix-blend-difference"
+    : inverted
+      ? "text-white"
+      : "text-ink";
+
   return (
-    <Link href="/" aria-label="cwapa home" className={`inline-flex items-center gap-2.5 ${inverted ? "text-white" : "text-ink"}`}>
+    <Link
+      href="/"
+      aria-label="cwapa home"
+      className={`inline-flex items-center gap-2.5 ${foreground}`}
+    >
       <BrandMark className="h-8 w-8" />
       <span className="text-[20px] font-semibold tracking-[-0.055em]">cwapa</span>
     </Link>
