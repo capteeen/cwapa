@@ -1,5 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/inter/800.css";
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/700.css";
+import "@fontsource/roboto/800.css";
+import "@fontsource/open-sans/400.css";
+import "@fontsource/open-sans/700.css";
+import "@fontsource/open-sans/800.css";
+import "@fontsource/lato/400.css";
+import "@fontsource/lato/700.css";
+import "@fontsource/comic-neue/400.css";
+import "@fontsource/comic-neue/700.css";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 import BrandLogo from "@/components/BrandLogo";
