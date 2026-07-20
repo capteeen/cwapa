@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { detectPlatform, PLATFORM_LABELS } from "@/lib/platform";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { detectPlatform, getYouTubeVideoId, PLATFORM_LABELS } from "@/lib/platform";
 import {
   DEFAULT_CAPTION_STYLE,
   type CaptionAspect,
@@ -13,6 +13,7 @@ import {
 import type { TranscriptSegment } from "@/lib/whisper";
 import { formatClock } from "@/lib/format";
 import { saveTranscriptProject } from "@/lib/library";
+import YouTubePreview, { type YouTubePreviewHandle } from "@/components/YouTubePreview";
 
 interface StudioMeta {
   title: string;
@@ -70,18 +71,22 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
   const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const youtubeRef = useRef<YouTubePreviewHandle>(null);
   const segmentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
   const platform = detectPlatform(url);
+  const youtubeVideoId = platform === "youtube" ? getYouTubeVideoId(url) : null;
   const duration = meta?.durationSeconds || segments.at(-1)?.end || 1;
   const activeIndex = useMemo(
     () => segments.findIndex((segment) => currentTime >= segment.start && currentTime < segment.end),
     [currentTime, segments]
   );
   const activeSegment = activeIndex >= 0 ? segments[activeIndex] : null;
-  const previewUrl = meta
+  const previewUrl = meta && platform !== "youtube"
     ? `/api/studio/source?url=${encodeURIComponent(url.trim())}`
     : undefined;
+  const handlePreviewReady = useCallback(() => setPreviewError(false), []);
+  const handlePreviewError = useCallback(() => setPreviewError(true), []);
 
   useEffect(() => {
     if (!rendering) return;
@@ -132,6 +137,7 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
   }
 
   function seek(time: number, focusEditor = false) {
+    youtubeRef.current?.seekTo(time);
     const video = videoRef.current;
     if (video) video.currentTime = time;
     setCurrentTime(time);
@@ -271,19 +277,30 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
       <div className="grid lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="relative flex min-h-[520px] items-center justify-center overflow-hidden bg-[#050506] p-6 lg:p-10">
           <div className={`relative mx-auto w-full overflow-hidden rounded-2xl bg-black shadow-2xl ${aspectClass}`}>
-            <video
-              key={previewUrl}
-              ref={videoRef}
-              src={previewUrl}
-              poster={meta.thumbnail ?? undefined}
-              controls
-              playsInline
-              preload="metadata"
-              onCanPlay={() => setPreviewError(false)}
-              onError={() => setPreviewError(true)}
-              onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-              className="h-full w-full object-cover"
-            />
+            {youtubeVideoId ? (
+              <YouTubePreview
+                key={youtubeVideoId}
+                ref={youtubeRef}
+                videoId={youtubeVideoId}
+                onReady={handlePreviewReady}
+                onError={handlePreviewError}
+                onTimeUpdate={setCurrentTime}
+              />
+            ) : (
+              <video
+                key={previewUrl}
+                ref={videoRef}
+                src={previewUrl}
+                poster={meta.thumbnail ?? undefined}
+                controls
+                playsInline
+                preload="metadata"
+                onCanPlay={() => setPreviewError(false)}
+                onError={() => setPreviewError(true)}
+                onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+                className="h-full w-full object-cover"
+              />
+            )}
             {previewError && (
               <div className="absolute inset-x-4 top-4 rounded-xl border border-red-300/20 bg-black/80 px-4 py-3 text-center text-[12px] text-red-100 backdrop-blur">
                 This preview could not be played. Try reloading it or use a different source video.

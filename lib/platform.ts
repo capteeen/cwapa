@@ -24,6 +24,25 @@ export function detectPlatform(url: string): Platform | null {
   return null;
 }
 
+export function getYouTubeVideoId(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    const host = url.hostname.replace(/^www\./, "").replace(/^m\./, "");
+    let id: string | null = null;
+
+    if (host === "youtu.be") {
+      id = url.pathname.split("/").filter(Boolean)[0] ?? null;
+    } else if (host === "youtube.com" || host === "music.youtube.com") {
+      if (url.pathname === "/watch") id = url.searchParams.get("v");
+      else id = url.pathname.split("/").filter(Boolean)[1] ?? null;
+    }
+
+    return id && /^[\w-]{6,}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export const PLATFORM_LABELS: Record<Platform, string> = {
   youtube: "YouTube",
   tiktok: "TikTok",
