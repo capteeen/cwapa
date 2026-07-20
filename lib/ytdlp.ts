@@ -7,12 +7,14 @@ import { promisify } from "node:util";
 import { detectPlatform } from "./platform";
 import { notifyCookieIssue } from "./alert";
 import { recordProxyBytes } from "./usage";
+import { isTransientYtDlpFailure, tiktokAttemptCount } from "./ytdlp-retry";
 
 const execFileAsync = promisify(execFile);
 
 export const YT_DLP = process.env.YT_DLP_PATH || "yt-dlp";
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 const MAX_DURATION_SECONDS = Number(process.env.MAX_VIDEO_SECONDS || 3600);
+const TIKTOK_ATTEMPTS = tiktokAttemptCount(process.env.YT_DLP_TIKTOK_RETRIES);
 
 export interface VideoMeta {
   id: string;
@@ -24,8 +26,11 @@ export interface VideoMeta {
 }
 
 export class TranscribeError extends Error {
-  constructor(message: string, public status = 500) {
+  public status: number;
+
+  constructor(message: string, status = 500) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -126,6 +131,18 @@ export function shouldRotateClient(stderr: string): boolean {
   );
 }
 
+function ytDlpAttemptCount(url: string): number {
+  const platform = detectPlatform(url);
+  if (platform === "youtube") {
+    return YT_CLIENT_SETS.length + (resolveCookies() ? 1 : 0);
+  }
+  return platform === "tiktok" ? TIKTOK_ATTEMPTS : 1;
+}
+
+function retryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.min(2_000, 500 * 2 ** attempt)));
+}
+
 export function commonArgs(
   url?: string,
   clientSet = 0,
@@ -164,16 +181,15 @@ export async function execYtDlp(
   extraArgs: string[],
   opts: { maxBuffer: number; timeout: number; skipProxy?: boolean }
 ): Promise<{ stdout: string; stderr: string }> {
-  const attempts =
-    detectPlatform(url) === "youtube"
-      ? YT_CLIENT_SETS.length + (resolveCookies() ? 1 : 0)
-      : 1;
+  const platform = detectPlatform(url);
+  const attempts = ytDlpAttemptCount(url);
   let lastErr: any;
+  let skipProxy = opts.skipProxy;
   for (let i = 0; i < attempts; i++) {
     try {
       return await execFileAsync(
         YT_DLP,
-        [...commonArgs(url, i, { skipProxy: opts.skipProxy }), ...extraArgs, url],
+        [...commonArgs(url, i, { skipProxy }), ...extraArgs, url],
         opts
       );
     } catch (err: any) {
@@ -181,7 +197,16 @@ export async function execYtDlp(
         throw new TranscribeError("yt-dlp is not installed on the server. See README for setup.", 500);
       }
       lastErr = err;
-      if (i + 1 < attempts && shouldRotateClient(String(err?.stderr ?? ""))) {
+      const stderr = String(err?.stderr ?? err?.message ?? "");
+      const retryYouTube = platform === "youtube" && shouldRotateClient(stderr);
+      const retryTikTok = platform === "tiktok" && isTransientYtDlpFailure(stderr);
+      if (i + 1 < attempts && (retryYouTube || retryTikTok)) {
+        // A proxy can be the TLS endpoint that closed the connection. Preserve
+        // it for the first retries, then make the final TikTok attempt direct.
+        if (retryTikTok && process.env.YT_DLP_PROXY && i + 2 === attempts) {
+          skipProxy = true;
+        }
+        if (retryTikTok) await retryDelay(i);
         continue;
       }
       throw err;
@@ -203,6 +228,12 @@ export function explainYtDlpFailure(stderr: string): TranscribeError {
   }
   if (s.includes("unsupported url")) {
     return new TranscribeError("This URL is not supported.", 422);
+  }
+  if (isTransientYtDlpFailure(stderr)) {
+    return new TranscribeError(
+      "The platform ended its secure connection before the video could be fetched. Cwapa retried automatically; please try once more in a moment.",
+      502
+    );
   }
   if (s.includes("requested format is not available")) {
     notifyCookieIssue("no usable formats offered");

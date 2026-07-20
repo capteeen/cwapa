@@ -49,6 +49,7 @@ docker run -p 3000:3000 -e OPENAI_API_KEY=sk-... cwapa
 | `LLM_API_URL` | Provider chat-completions endpoint | Optional OpenAI-compatible endpoint used for summaries, moment search, and translation |
 | `LLM_MODEL` | `gpt-4o-mini` (OpenAI) or `llama-3.3-70b-versatile` (Groq) | Model used for AI text features |
 | `YT_DLP_PATH` | `yt-dlp` | Path to the yt-dlp binary |
+| `YT_DLP_TIKTOK_RETRIES` | `3` | Fresh attempts for transient TikTok TLS/network failures (1–5) |
 | `FFMPEG_PATH` | `ffmpeg` | Path to the ffmpeg binary |
 | `MAX_VIDEO_SECONDS` | `3600` | Reject videos longer than this |
 | `YT_DLP_COOKIES` | — | Cookies file for Instagram / age-gated content |
