@@ -95,7 +95,7 @@ export default function LibraryClient() {
       <section>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div><h1 className="text-3xl font-semibold tracking-tight">Your library</h1><p className="mt-1 text-[13px] text-muted">Every transcript, ready when you are.</p></div>
-          <div className="flex gap-2"><Link href="/" className="rounded-full bg-ink px-5 py-2.5 text-[12px] font-semibold text-white">New transcript</Link><button onClick={async () => { await signOutAction(); window.location.href = "/"; }} className="rounded-full border border-hairline px-4 py-2.5 text-[12px] text-muted">Sign out</button></div>
+          <div className="flex gap-2"><Link href="/activity" className="rounded-full border border-hairline px-4 py-2.5 text-[12px] font-medium text-muted">Usage & renders</Link><Link href="/" className="rounded-full bg-ink px-5 py-2.5 text-[12px] font-semibold text-white">New transcript</Link><button onClick={async () => { await signOutAction(); window.location.href = "/"; }} className="rounded-full border border-hairline px-4 py-2.5 text-[12px] text-muted">Sign out</button></div>
         </div>
         <div className="mt-7 relative"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search titles or platforms" className="w-full rounded-2xl bg-surface px-5 py-3.5 text-[14px] outline-none focus:ring-2 focus:ring-accent/25" /><span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted">⌕</span></div>
         {error && <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-[12px] text-red-600">{error}</p>}

@@ -16,6 +16,7 @@ import { CAPTION_PRESETS, applyPreset } from "@/lib/captionPresets";
 import type { TranscriptSegment } from "@/lib/whisper";
 import { formatClock } from "@/lib/format";
 import { saveTranscriptProject } from "@/lib/library";
+import { getInsForgeBrowserClient } from "@/lib/insforge";
 import YouTubePreview, { type YouTubePreviewHandle } from "@/components/YouTubePreview";
 
 interface StudioMeta {
@@ -68,7 +69,7 @@ type DragState =
   | { type: "scrub" }
   | { type: "move" | "trim-start" | "trim-end"; index: number; originX: number; start: number; end: number };
 
-export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: string }) {
+export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { defaultUrl?: string; projectId?: string | null }) {
   const [url, setUrl] = useState(defaultUrl);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,15 +79,19 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
   const [currentTime, setCurrentTime] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [renderStage, setRenderStage] = useState(0);
+  const [renderProgress, setRenderProgress] = useState(0);
+  const [renderJobId, setRenderJobId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
+  const [savedProjectId, setSavedProjectId] = useState<string | null>(projectId);
+  const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "offline">("idle");
   const [previewError, setPreviewError] = useState(false);
   const [pxPerSec, setPxPerSec] = useState(56);
   const [selected, setSelected] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const youtubeRef = useRef<YouTubePreviewHandle>(null);
   const segmentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const autosaveCount = useRef(0);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [, forceDragPaint] = useState(0);
@@ -113,6 +118,71 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
     );
     return () => window.clearInterval(interval);
   }, [rendering]);
+
+  const watchRender = useCallback(async (jobId: string) => {
+    setRendering(true);
+    setRenderJobId(jobId);
+    window.localStorage.setItem("cwapa:active-render", jobId);
+    try {
+      for (;;) {
+        const response = await fetch(`/api/render-jobs/${jobId}`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not resume the render.");
+        const job = data.job;
+        setRenderProgress(Number(job.progress || 0));
+        setRenderStage(job.status === "retrying" ? 1 : job.progress >= 80 ? 2 : job.progress >= 30 ? 1 : 0);
+        if (job.status === "succeeded") {
+          window.localStorage.removeItem("cwapa:active-render");
+          window.location.href = `/api/render-jobs/${jobId}/download`;
+          return;
+        }
+        if (job.status === "failed" || job.status === "cancelled") {
+          window.localStorage.removeItem("cwapa:active-render");
+          throw new Error(job.error_message || (job.credit_refunded ? "Render failed. Your credit was refunded." : "Render failed."));
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+      }
+    } finally {
+      setRendering(false);
+      setRenderJobId(null);
+      setRenderProgress(0);
+      setRenderStage(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    const activeJob = window.localStorage.getItem("cwapa:active-render");
+    if (activeJob) void watchRender(activeJob).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not resume the render."));
+  }, [watchRender]);
+
+  useEffect(() => {
+    if (!meta || !segments.length) return;
+    setAutosaveState("saving");
+    const timeout = window.setTimeout(async () => {
+      const draft = { url: url.trim(), meta, segments, style, savedAt: new Date().toISOString() };
+      window.localStorage.setItem(`cwapa:studio-draft:${url.trim()}`, JSON.stringify(draft));
+      if (!savedProjectId) {
+        setAutosaveState("offline");
+        return;
+      }
+      try {
+        autosaveCount.current += 1;
+        const client = getInsForgeBrowserClient();
+        const result = await client.database.rpc("save_project_draft", {
+          p_project_id: savedProjectId,
+          p_segments: segments,
+          p_style: style,
+          p_reason: "autosave",
+          p_create_version: autosaveCount.current % 10 === 0,
+        });
+        if (result.error) throw result.error;
+        setAutosaveState("saved");
+      } catch {
+        setAutosaveState("offline");
+      }
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [meta, savedProjectId, segments, style, url]);
 
   // Keep the playhead visible while playing.
   useEffect(() => {
@@ -143,8 +213,11 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
       if (!data.transcript?.segments?.length) {
         throw new Error("No timed speech was found in this video.");
       }
+      const cached = window.localStorage.getItem(`cwapa:studio-draft:${url.trim()}`);
+      const draft = cached ? JSON.parse(cached) : null;
       setMeta(data.meta);
-      setSegments(data.transcript.segments);
+      setSegments(Array.isArray(draft?.segments) ? draft.segments : data.transcript.segments);
+      if (draft?.style) setStyle(draft.style);
       setPreviewError(false);
       setDirty(false);
     } catch (reason) {
@@ -160,6 +233,11 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
         segmentIndex === index ? { ...segment, ...patch } : segment
       )
     );
+    setDirty(true);
+  }
+
+  function updateStyle(patch: Partial<CaptionStyle>) {
+    setStyle((current) => ({ ...current, ...patch }));
     setDirty(true);
   }
 
@@ -271,26 +349,22 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
     setRenderStage(0);
     setError(null);
     try {
-      const response = await fetch("/api/studio/render", {
+      const idempotencyKey = crypto.randomUUID();
+      const response = await fetch("/api/render-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), segments, style }),
+        body: JSON.stringify({
+          url: url.trim(), segments, style, projectId: savedProjectId,
+          title: `${meta.title} — captioned`, idempotencyKey,
+        }),
       });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error ?? "Could not render the captioned video.");
-      }
-      const blob = await response.blob();
-      const anchor = document.createElement("a");
-      anchor.href = URL.createObjectURL(blob);
-      anchor.download = `${meta.title.replace(/[^\w\d -]+/g, "").slice(0, 50) || "cwapa"}-captioned.mp4`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(anchor.href), 10_000);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "Could not queue the captioned video.");
+      await watchRender(data.jobId);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not render the video.");
     } finally {
       setRendering(false);
-      setRenderStage(0);
     }
   }
 
@@ -409,11 +483,11 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
           <p className="mt-0.5 text-[11px] text-white/45">{segments.length} captions · {formatClock(duration)} {dirty ? "· Edited" : "· Synced"}</p>
         </div>
         <div className="flex items-center gap-2">
-          {savedProjectId ? <a href={`/library/${savedProjectId}`} className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-2 text-[12px] font-medium text-emerald-300">Saved ✓</a> : <button onClick={saveToLibrary} disabled={saving} className="rounded-full border border-white/15 px-3.5 py-2 text-[12px] font-medium text-white/75 transition hover:bg-white/10 disabled:opacity-40">{saving ? "Saving…" : "Save"}</button>}
+          {savedProjectId ? <a href={`/library/${savedProjectId}`} className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-2 text-[12px] font-medium text-emerald-300">{autosaveState === "saving" ? "Saving…" : autosaveState === "offline" ? "Saved locally" : "Saved ✓"}</a> : <button onClick={saveToLibrary} disabled={saving} className="rounded-full border border-white/15 px-3.5 py-2 text-[12px] font-medium text-white/75 transition hover:bg-white/10 disabled:opacity-40">{saving ? "Saving…" : "Save"}</button>}
           <button onClick={() => downloadText("srt")} className="rounded-full border border-white/15 px-3.5 py-2 text-[12px] font-medium text-white/75 transition hover:bg-white/10">SRT</button>
           <button onClick={() => downloadText("vtt")} className="rounded-full border border-white/15 px-3.5 py-2 text-[12px] font-medium text-white/75 transition hover:bg-white/10">VTT</button>
           <button onClick={renderVideo} disabled={rendering} className="rounded-full bg-white px-5 py-2 text-[12px] font-semibold text-black transition hover:bg-white/90 disabled:opacity-50">
-            {rendering ? "Rendering…" : "Export video"}
+            {rendering ? `${renderProgress || 1}% · Rendering` : "Export video"}
           </button>
         </div>
       </div>
@@ -510,6 +584,7 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
               <div className="text-center">
                 <div className="studio-render-mark mx-auto"><span /><span /><span /></div>
                 <p className="mt-6 text-[15px] font-semibold">{["Preparing media", "Compositing every frame", "Finishing your video"][renderStage]}</p>
+                <p className="mt-2 text-[11px] text-white/40">{renderJobId ? "Safe to leave—this render will continue in the background." : "Your render is being secured."}</p>
                 <p className="mt-1 text-[12px] text-white/45">Keep this tab open. Your download starts automatically.</p>
                 <div className="mx-auto mt-5 h-1 w-52 overflow-hidden rounded-full bg-white/10"><span className="studio-render-progress block h-full rounded-full bg-white" /></div>
               </div>
@@ -521,7 +596,7 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Canvas</p>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {ASPECTS.map((aspect) => (
-              <button key={aspect.value} onClick={() => setStyle({ ...style, aspect: aspect.value })} className={`rounded-xl border px-2 py-3 text-center transition ${style.aspect === aspect.value ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>
+              <button key={aspect.value} onClick={() => updateStyle({ aspect: aspect.value })} className={`rounded-xl border px-2 py-3 text-center transition ${style.aspect === aspect.value ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>
                 <span className="block text-lg leading-none">{aspect.icon}</span><span className="mt-1.5 block text-[10px] font-medium">{aspect.label}</span>
               </button>
             ))}
@@ -529,30 +604,30 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
 
           <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Typography</p>
           <label className="mt-3 block text-[11px] text-white/45">Font</label>
-          <select value={style.font} onChange={(event) => setStyle({ ...style, font: event.target.value as CaptionStyle["font"] })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[12px] outline-none focus:border-white/30">
+          <select value={style.font} onChange={(event) => updateStyle({ font: event.target.value as CaptionStyle["font"] })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[12px] outline-none focus:border-white/30">
             {FONTS.map((font) => <option key={font} value={font} className="bg-[#17171a]">{font}</option>)}
           </select>
-          <label className="mt-4 block text-[11px] text-white/45">Size<input type="range" min="28" max="110" value={style.size} onChange={(event) => setStyle({ ...style, size: Number(event.target.value) })} className="mt-2 w-full accent-white" /></label>
+          <label className="mt-4 block text-[11px] text-white/45">Size<input type="range" min="28" max="110" value={style.size} onChange={(event) => updateStyle({ size: Number(event.target.value) })} className="mt-2 w-full accent-white" /></label>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <label className="text-[11px] text-white/45">Text<span className="mt-1 flex h-9 items-center rounded-xl border border-white/10 bg-white/5 p-1"><input type="color" value={style.color} onChange={(event) => setStyle({ ...style, color: event.target.value })} className="h-full w-full cursor-pointer rounded-lg border-0 bg-transparent" /></span></label>
-            <label className="text-[11px] text-white/45">Highlight<span className="mt-1 flex h-9 items-center rounded-xl border border-white/10 bg-white/5 p-1"><input type="color" value={style.highlightColor} onChange={(event) => setStyle({ ...style, highlightColor: event.target.value })} className="h-full w-full cursor-pointer rounded-lg border-0 bg-transparent" /></span></label>
+            <label className="text-[11px] text-white/45">Text<span className="mt-1 flex h-9 items-center rounded-xl border border-white/10 bg-white/5 p-1"><input type="color" value={style.color} onChange={(event) => updateStyle({ color: event.target.value })} className="h-full w-full cursor-pointer rounded-lg border-0 bg-transparent" /></span></label>
+            <label className="text-[11px] text-white/45">Highlight<span className="mt-1 flex h-9 items-center rounded-xl border border-white/10 bg-white/5 p-1"><input type="color" value={style.highlightColor} onChange={(event) => updateStyle({ highlightColor: event.target.value })} className="h-full w-full cursor-pointer rounded-lg border-0 bg-transparent" /></span></label>
           </div>
           <div className="mt-3 flex gap-2">
-            <button onClick={() => setStyle({ ...style, uppercase: !style.uppercase })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] font-semibold transition ${style.uppercase ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>AA</button>
-            <button onClick={() => setStyle({ ...style, bold: !style.bold })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] font-bold transition ${style.bold ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>B</button>
-            <button onClick={() => setStyle({ ...style, glow: !style.glow })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] transition ${style.glow ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>✦</button>
-            <button onClick={() => setStyle({ ...style, box: !style.box })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] transition ${style.box ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>▣</button>
+            <button onClick={() => updateStyle({ uppercase: !style.uppercase })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] font-semibold transition ${style.uppercase ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>AA</button>
+            <button onClick={() => updateStyle({ bold: !style.bold })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] font-bold transition ${style.bold ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>B</button>
+            <button onClick={() => updateStyle({ glow: !style.glow })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] transition ${style.glow ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>✦</button>
+            <button onClick={() => updateStyle({ box: !style.box })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] transition ${style.box ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>▣</button>
           </div>
-          <label className="mt-3 block text-[11px] text-white/45">Outline<input type="range" min="0" max="8" value={style.outline} onChange={(event) => setStyle({ ...style, outline: Number(event.target.value) })} className="mt-2 w-full accent-white" /></label>
+          <label className="mt-3 block text-[11px] text-white/45">Outline<input type="range" min="0" max="8" value={style.outline} onChange={(event) => updateStyle({ outline: Number(event.target.value) })} className="mt-2 w-full accent-white" /></label>
 
           <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Animation</p>
           <div className="mt-3 flex rounded-xl bg-white/5 p-1">
-            {KARAOKE_MODES.map((mode) => <button key={mode.value} onClick={() => setStyle({ ...style, karaoke: mode.value })} className={`flex-1 rounded-lg py-2 text-[10px] font-medium transition ${style.karaoke === mode.value ? "bg-white text-black" : "text-white/45"}`}>{mode.label}</button>)}
+            {KARAOKE_MODES.map((mode) => <button key={mode.value} onClick={() => updateStyle({ karaoke: mode.value })} className={`flex-1 rounded-lg py-2 text-[10px] font-medium transition ${style.karaoke === mode.value ? "bg-white text-black" : "text-white/45"}`}>{mode.label}</button>)}
           </div>
 
           <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Position</p>
           <div className="mt-3 flex rounded-xl bg-white/5 p-1">
-            {PLACEMENTS.map((placement) => <button key={placement.value} onClick={() => setStyle({ ...style, placement: placement.value })} className={`flex-1 rounded-lg py-2 text-[10px] font-medium transition ${style.placement === placement.value ? "bg-white text-black" : "text-white/45"}`}>{placement.label}</button>)}
+            {PLACEMENTS.map((placement) => <button key={placement.value} onClick={() => updateStyle({ placement: placement.value })} className={`flex-1 rounded-lg py-2 text-[10px] font-medium transition ${style.placement === placement.value ? "bg-white text-black" : "text-white/45"}`}>{placement.label}</button>)}
           </div>
         </aside>
       </div>
