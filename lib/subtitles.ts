@@ -2,17 +2,19 @@ import type { TranscriptSegment } from "./whisper";
 
 export type CaptionAspect = "9:16" | "1:1" | "16:9";
 export type CaptionPlacement = "top" | "middle" | "bottom";
-export type CaptionFont =
-  | "Inter"
-  | "Roboto"
-  | "Open Sans"
-  | "Lato"
-  | "Comic Neue"
-  | "Helvetica"
-  | "Arial"
-  | "Georgia"
-  | "Courier New"
-  | "Impact";
+export const CAPTION_FONTS = [
+  "Inter",
+  "Roboto",
+  "Open Sans",
+  "Lato",
+  "Comic Neue",
+  "Helvetica",
+  "Arial",
+  "Impact",
+  "Georgia",
+  "Courier New",
+] as const;
+export type CaptionFont = (typeof CAPTION_FONTS)[number];
 /**
  * off   — static text
  * fill  — classic karaoke sweep across each word (\kf)

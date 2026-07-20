@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
     } as any,
   });
 
-  if (request.nextUrl.pathname.startsWith("/library") && !session.accessToken) {
+  if (["/library", "/activity"].some((path) => request.nextUrl.pathname.startsWith(path)) && !session.accessToken) {
     const authUrl = new URL("/auth", request.url);
     authUrl.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(authUrl);
@@ -31,5 +31,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/library/:path*", "/auth/:path*"],
+  matcher: ["/library/:path*", "/activity/:path*", "/auth/:path*"],
 };
