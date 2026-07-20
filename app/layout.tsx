@@ -53,19 +53,19 @@ export default function RootLayout({
       <body>
         <div className="flex min-h-screen flex-col">
           <nav className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4">
-            <div className="pointer-events-auto mx-auto flex max-w-5xl items-center justify-between rounded-full border border-white/60 bg-white/72 px-4 py-2.5 shadow-[0_16px_50px_-24px_rgba(12,18,28,.55)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/68 sm:px-5">
-              <BrandLogo />
+            <div className="pointer-events-auto mx-auto flex max-w-5xl items-center justify-between rounded-full border border-white/35 bg-white/[.08] px-4 py-2.5 shadow-[0_16px_50px_-24px_rgba(12,18,28,.55)] backdrop-blur-2xl sm:px-5">
+              <BrandLogo adaptive />
               <div className="flex items-center gap-3 text-[13px] sm:gap-6 sm:text-[14px]">
-                <Link href="/studio" className="hidden text-muted transition hover:text-ink md:block">
+                <Link href="/studio" className="hidden text-white mix-blend-difference transition hover:opacity-70 md:block">
                   Caption Studio
                 </Link>
-                <Link href="/repurpose" className="hidden text-muted transition hover:text-ink sm:block">
+                <Link href="/repurpose" className="hidden text-white mix-blend-difference transition hover:opacity-70 sm:block">
                   Repurpose
                 </Link>
-                <Link href="/tools" className="hidden text-muted transition hover:text-ink sm:block">
+                <Link href="/tools" className="hidden text-white mix-blend-difference transition hover:opacity-70 sm:block">
                   Tools
                 </Link>
-                <Link href="/pricing" className="text-muted transition hover:text-ink">
+                <Link href="/pricing" className="text-white mix-blend-difference transition hover:opacity-70">
                   Pricing
                 </Link>
                 <AccountNav />

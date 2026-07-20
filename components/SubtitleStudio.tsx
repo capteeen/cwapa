@@ -68,6 +68,7 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const segmentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
@@ -112,6 +113,7 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
       }
       setMeta(data.meta);
       setSegments(data.transcript.segments);
+      setPreviewError(false);
       setDirty(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not prepare this video.");
@@ -277,9 +279,16 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
               controls
               playsInline
               preload="metadata"
+              onCanPlay={() => setPreviewError(false)}
+              onError={() => setPreviewError(true)}
               onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
               className="h-full w-full object-cover"
             />
+            {previewError && (
+              <div className="absolute inset-x-4 top-4 rounded-xl border border-red-300/20 bg-black/80 px-4 py-3 text-center text-[12px] text-red-100 backdrop-blur">
+                This preview could not be played. Try reloading it or use a different source video.
+              </div>
+            )}
             {activeSegment && (
               <div className={`pointer-events-none absolute left-[7%] right-[7%] text-center ${placementClass}`}>
                 <p
