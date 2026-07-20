@@ -7,7 +7,9 @@ export const metadata: Metadata = {
     "Create editable, perfectly timed subtitles, style them for every social format, and export captioned videos, SRT, or VTT.",
 };
 
-export default function StudioPage({ searchParams }: { searchParams: { url?: string } }) {
+export default async function StudioPage({ searchParams }: { searchParams: Promise<{ url?: string }> }) {
+  const { url } = await searchParams;
+
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-24 pt-14 sm:px-6 sm:pt-20">
       <header className="mx-auto mb-12 max-w-2xl text-center">
@@ -22,7 +24,7 @@ export default function StudioPage({ searchParams }: { searchParams: { url?: str
           screen your audience is already holding.
         </p>
       </header>
-      <SubtitleStudio defaultUrl={searchParams.url ?? ""} />
+      <SubtitleStudio defaultUrl={url ?? ""} />
     </main>
   );
 }

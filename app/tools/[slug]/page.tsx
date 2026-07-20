@@ -7,18 +7,20 @@ export function generateStaticParams() {
   return TOOL_PAGES.map((t) => ({ slug: t.slug }));
 }
 
-export function generateMetadata({
+export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
-}): Metadata {
-  const tool = getToolPage(params.slug);
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const tool = getToolPage(slug);
   if (!tool) return {};
   return { title: tool.metaTitle, description: tool.metaDescription };
 }
 
-export default function ToolPage({ params }: { params: { slug: string } }) {
-  const tool = getToolPage(params.slug);
+export default async function ToolPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const tool = getToolPage(slug);
   if (!tool) notFound();
 
   return (
