@@ -15,7 +15,7 @@ ENV NODE_ENV=production
 
 # yt-dlp + ffmpeg are required at runtime for audio extraction
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates python3 \
+  && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates python3 fonts-liberation fonts-urw-base35 fontconfig \
   && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
   && chmod +x /usr/local/bin/yt-dlp \
   && apt-get clean && rm -rf /var/lib/apt/lists/*

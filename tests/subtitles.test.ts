@@ -38,3 +38,46 @@ test("invalid or inverted subtitle ranges are rejected", () => {
     /end time after its start time/
   );
 });
+
+test("pop mode uses \\k and uppercase transforms text", () => {
+  const ass = toAss(segments, {
+    ...DEFAULT_CAPTION_STYLE,
+    karaoke: "pop",
+    uppercase: true,
+  });
+  assert.match(ass, /\{\\k\d+\}HELLO \{\\k\d+\}WORLD/);
+});
+
+test("word mode emits one event per word", () => {
+  const ass = toAss([{ start: 0, end: 2, text: "one two three" }], {
+    ...DEFAULT_CAPTION_STYLE,
+    karaoke: "word",
+  });
+  const events = ass.split("\n").filter((line) => line.startsWith("Dialogue:"));
+  assert.equal(events.length, 3);
+  assert.match(events[0], /,one$/);
+  assert.match(events[2], /,three$/);
+});
+
+test("box style switches to BorderStyle 3", () => {
+  const ass = toAss(segments, { ...DEFAULT_CAPTION_STYLE, box: true, karaoke: "off" });
+  assert.match(ass, /,100,100,0,0,3,\d+,\d+,/);
+});
+
+test("Impact exports use the condensed font installed in the render image", () => {
+  const ass = toAss(segments, { ...DEFAULT_CAPTION_STYLE, font: "Impact" });
+  assert.match(ass, /Style: Caption,Nimbus Sans Narrow,/);
+});
+
+test("presets apply while preserving canvas and placement", async () => {
+  const { CAPTION_PRESETS, applyPreset } = await import("../lib/captionPresets.ts");
+  const beast = CAPTION_PRESETS.find((preset) => preset.id === "beast")!;
+  const styled = applyPreset(
+    { ...DEFAULT_CAPTION_STYLE, aspect: "16:9", placement: "top" },
+    beast
+  );
+  assert.equal(styled.preset, "beast");
+  assert.equal(styled.uppercase, true);
+  assert.equal(styled.aspect, "16:9");
+  assert.equal(styled.placement, "top");
+});

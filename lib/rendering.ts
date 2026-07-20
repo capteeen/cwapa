@@ -6,6 +6,8 @@ import { promisify } from "node:util";
 import {
   DEFAULT_CAPTION_STYLE,
   type CaptionAspect,
+  type CaptionFont,
+  type KaraokeMode,
   type CaptionPlacement,
   type CaptionStyle,
   toAss,
@@ -20,14 +22,39 @@ const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 const FONTS = new Set(["Helvetica", "Arial", "Georgia", "Courier New", "Impact"]);
 const ASPECTS = new Set<CaptionAspect>(["9:16", "1:1", "16:9"]);
 const PLACEMENTS = new Set<CaptionPlacement>(["top", "middle", "bottom"]);
+const KARAOKE_MODES = new Set<KaraokeMode>(["off", "fill", "pop", "word"]);
+
+function color(value: unknown, fallback: string): string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
 
 export function parseCaptionStyle(value: any): CaptionStyle {
-  const font = FONTS.has(value?.font) ? value.font : DEFAULT_CAPTION_STYLE.font;
-  const color = /^#[0-9a-f]{6}$/i.test(value?.color) ? value.color : DEFAULT_CAPTION_STYLE.color;
-  const size = Math.min(96, Math.max(28, Number(value?.size) || DEFAULT_CAPTION_STYLE.size));
+  const font = (FONTS.has(value?.font) ? value.font : DEFAULT_CAPTION_STYLE.font) as CaptionFont;
+  const size = Math.min(110, Math.max(28, Number(value?.size) || DEFAULT_CAPTION_STYLE.size));
   const placement = PLACEMENTS.has(value?.placement) ? value.placement : DEFAULT_CAPTION_STYLE.placement;
   const aspect = ASPECTS.has(value?.aspect) ? value.aspect : DEFAULT_CAPTION_STYLE.aspect;
-  return { font, color, size, placement, aspect, karaoke: value?.karaoke !== false };
+  const karaoke = KARAOKE_MODES.has(value?.karaoke)
+    ? value.karaoke as KaraokeMode
+    : value?.karaoke === false ? "off" : DEFAULT_CAPTION_STYLE.karaoke;
+  return {
+    ...DEFAULT_CAPTION_STYLE,
+    preset: typeof value?.preset === "string" ? value.preset.slice(0, 40) : DEFAULT_CAPTION_STYLE.preset,
+    font,
+    color: color(value?.color, DEFAULT_CAPTION_STYLE.color),
+    highlightColor: color(value?.highlightColor, DEFAULT_CAPTION_STYLE.highlightColor),
+    size,
+    placement,
+    aspect,
+    karaoke,
+    uppercase: Boolean(value?.uppercase),
+    bold: value?.bold !== false,
+    outline: Math.min(8, Math.max(0, Number(value?.outline) || 0)),
+    outlineColor: color(value?.outlineColor, DEFAULT_CAPTION_STYLE.outlineColor),
+    shadow: Math.min(6, Math.max(0, Number(value?.shadow) || 0)),
+    box: Boolean(value?.box),
+    boxColor: color(value?.boxColor, DEFAULT_CAPTION_STYLE.boxColor),
+    glow: Boolean(value?.glow),
+  };
 }
 
 export interface RenderResult {

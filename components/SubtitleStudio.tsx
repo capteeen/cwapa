@@ -4,12 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { detectPlatform, getYouTubeVideoId, PLATFORM_LABELS } from "@/lib/platform";
 import {
   DEFAULT_CAPTION_STYLE,
+  wordTimings,
   type CaptionAspect,
   type CaptionPlacement,
   type CaptionStyle,
+  type KaraokeMode,
   toSrt,
   toVtt,
 } from "@/lib/subtitles";
+import { CAPTION_PRESETS, applyPreset } from "@/lib/captionPresets";
 import type { TranscriptSegment } from "@/lib/whisper";
 import { formatClock } from "@/lib/format";
 import { saveTranscriptProject } from "@/lib/library";
@@ -23,13 +26,7 @@ interface StudioMeta {
   thumbnail: string | null;
 }
 
-const FONTS: CaptionStyle["font"][] = [
-  "Helvetica",
-  "Arial",
-  "Georgia",
-  "Courier New",
-  "Impact",
-];
+const FONTS: CaptionStyle["font"][] = ["Helvetica", "Arial", "Georgia", "Courier New", "Impact"];
 
 const ASPECTS: { value: CaptionAspect; label: string; icon: string }[] = [
   { value: "9:16", label: "Vertical", icon: "▯" },
@@ -43,19 +40,34 @@ const PLACEMENTS: { value: CaptionPlacement; label: string }[] = [
   { value: "bottom", label: "Bottom" },
 ];
 
-function currentWordIndex(segment: TranscriptSegment, time: number): number {
-  const words = segment.text.trim().split(/\s+/).filter(Boolean);
-  if (!words.length) return -1;
-  const progress = Math.min(0.999, Math.max(0, (time - segment.start) / (segment.end - segment.start)));
-  const weights = words.map((word) => Math.max(1, word.replace(/[^\p{L}\p{N}]/gu, "").length));
-  const total = weights.reduce((sum, weight) => sum + weight, 0);
-  let elapsed = 0;
-  for (let index = 0; index < weights.length; index++) {
-    elapsed += weights[index] / total;
-    if (progress < elapsed) return index;
+const KARAOKE_MODES: { value: KaraokeMode; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "fill", label: "Fill" },
+  { value: "pop", label: "Pop" },
+  { value: "word", label: "Word" },
+];
+
+const MIN_SEGMENT_SECONDS = 0.15;
+
+function activeWordIndex(segment: TranscriptSegment, time: number): number {
+  const timings = wordTimings(segment);
+  for (let index = 0; index < timings.length; index++) {
+    if (time < timings[index].end) return index;
   }
-  return words.length - 1;
+  return timings.length - 1;
 }
+
+/** Pick a ruler label interval that keeps labels ~80px apart. */
+function labelStep(pxPerSec: number): number {
+  for (const step of [1, 2, 5, 10, 15, 30, 60, 120]) {
+    if (step * pxPerSec >= 80) return step;
+  }
+  return 300;
+}
+
+type DragState =
+  | { type: "scrub" }
+  | { type: "move" | "trim-start" | "trim-end"; index: number; originX: number; start: number; end: number };
 
 export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { defaultUrl?: string; projectId?: string | null }) {
   const [url, setUrl] = useState(defaultUrl);
@@ -74,10 +86,15 @@ export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { 
   const [savedProjectId, setSavedProjectId] = useState<string | null>(projectId);
   const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "offline">("idle");
   const [previewError, setPreviewError] = useState(false);
+  const [pxPerSec, setPxPerSec] = useState(56);
+  const [selected, setSelected] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const youtubeRef = useRef<YouTubePreviewHandle>(null);
   const segmentRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const autosaveCount = useRef(0);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const [, forceDragPaint] = useState(0);
 
   const platform = detectPlatform(url);
   const youtubeVideoId = platform === "youtube" ? getYouTubeVideoId(url) : null;
@@ -167,6 +184,16 @@ export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { 
     return () => window.clearTimeout(timeout);
   }, [meta, savedProjectId, segments, style, url]);
 
+  // Keep the playhead visible while playing.
+  useEffect(() => {
+    const box = timelineScrollRef.current;
+    if (!box || dragRef.current) return;
+    const x = currentTime * pxPerSec;
+    if (x < box.scrollLeft + 40 || x > box.scrollLeft + box.clientWidth - 80) {
+      box.scrollTo({ left: Math.max(0, x - box.clientWidth / 3) });
+    }
+  }, [currentTime, pxPerSec]);
+
   async function importVideo(event: React.FormEvent) {
     event.preventDefault();
     if (!url.trim() || loading) return;
@@ -214,18 +241,96 @@ export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { 
     setDirty(true);
   }
 
+  function deleteSegment(index: number) {
+    setSegments((current) => current.filter((_, i) => i !== index));
+    setSelected(null);
+    setDirty(true);
+  }
+
+  function addSegmentAtPlayhead() {
+    const start = Math.max(0, Math.min(duration - 0.5, currentTime));
+    const end = Math.min(duration, start + 2);
+    setSegments((current) =>
+      [...current, { start, end, text: "New caption" }].sort((a, b) => a.start - b.start)
+    );
+    setDirty(true);
+  }
+
   function seek(time: number, focusEditor = false) {
-    youtubeRef.current?.seekTo(time);
+    const clamped = Math.max(0, Math.min(duration, time));
+    youtubeRef.current?.seekTo(clamped);
     const video = videoRef.current;
-    if (video) video.currentTime = time;
-    setCurrentTime(time);
+    if (video) video.currentTime = clamped;
+    setCurrentTime(clamped);
     if (focusEditor) {
-      const index = segments.findIndex((segment) => time >= segment.start && time < segment.end);
+      const index = segments.findIndex((segment) => clamped >= segment.start && clamped < segment.end);
       if (index >= 0) {
         segmentRefs.current[index]?.focus();
         segmentRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     }
+  }
+
+  // ----- CapCut-style timeline drag logic -----
+  function timelineX(clientX: number): number {
+    const box = timelineScrollRef.current;
+    if (!box) return 0;
+    const rect = box.getBoundingClientRect();
+    return clientX - rect.left + box.scrollLeft;
+  }
+
+  function beginScrub(event: React.PointerEvent) {
+    event.preventDefault();
+    dragRef.current = { type: "scrub" };
+    (event.target as Element).setPointerCapture?.(event.pointerId);
+    seek(timelineX(event.clientX) / pxPerSec);
+  }
+
+  function beginBlockDrag(
+    event: React.PointerEvent,
+    index: number,
+    type: "move" | "trim-start" | "trim-end"
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    const segment = segments[index];
+    dragRef.current = { type, index, originX: event.clientX, start: segment.start, end: segment.end };
+    setSelected(index);
+    (event.target as Element).setPointerCapture?.(event.pointerId);
+    forceDragPaint((n) => n + 1);
+  }
+
+  function onTimelinePointerMove(event: React.PointerEvent) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (drag.type === "scrub") {
+      seek(timelineX(event.clientX) / pxPerSec);
+      return;
+    }
+    const dx = (event.clientX - drag.originX) / pxPerSec;
+    const length = drag.end - drag.start;
+    if (drag.type === "move") {
+      const start = Math.max(0, Math.min(duration - length, drag.start + dx));
+      updateSegment(drag.index, {
+        start: Number(start.toFixed(2)),
+        end: Number((start + length).toFixed(2)),
+      });
+    } else if (drag.type === "trim-start") {
+      const start = Math.max(0, Math.min(drag.end - MIN_SEGMENT_SECONDS, drag.start + dx));
+      updateSegment(drag.index, { start: Number(start.toFixed(2)) });
+    } else {
+      const end = Math.min(duration, Math.max(drag.start + MIN_SEGMENT_SECONDS, drag.end + dx));
+      updateSegment(drag.index, { end: Number(end.toFixed(2)) });
+    }
+  }
+
+  function endTimelineDrag() {
+    if (dragRef.current && dragRef.current.type !== "scrub") {
+      // Keep the caption list in reading order after a move.
+      setSegments((current) => [...current].sort((a, b) => a.start - b.start));
+    }
+    dragRef.current = null;
+    forceDragPaint((n) => n + 1);
   }
 
   function downloadText(kind: "srt" | "vtt") {
@@ -328,8 +433,47 @@ export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { 
 
   const aspectClass = style.aspect === "9:16" ? "aspect-[9/16] max-h-[620px]" : style.aspect === "1:1" ? "aspect-square" : "aspect-video";
   const placementClass = style.placement === "top" ? "top-[9%]" : style.placement === "middle" ? "top-1/2 -translate-y-1/2" : "bottom-[9%]";
-  const previewFontSize = Math.max(18, Math.min(42, style.size * (style.aspect === "9:16" ? 0.55 : 0.42)));
-  const activeWord = activeSegment && style.karaoke ? currentWordIndex(activeSegment, currentTime) : -1;
+  const previewFontSize = Math.max(16, Math.min(46, style.size * (style.aspect === "9:16" ? 0.5 : 0.38)));
+  const activeWord = activeSegment && style.karaoke !== "off" ? activeWordIndex(activeSegment, currentTime) : -1;
+  const step = labelStep(pxPerSec);
+  const timelineWidth = Math.max(320, duration * pxPerSec);
+  const dragging = dragRef.current !== null && dragRef.current.type !== "scrub";
+
+  const previewTextStyle: React.CSSProperties = {
+    fontFamily: style.font === "Impact" ? "Impact, 'Arial Black', sans-serif" : style.font,
+    fontSize: previewFontSize,
+    fontWeight: style.bold ? 800 : 500,
+    color: style.color,
+    textTransform: style.uppercase ? "uppercase" : "none",
+    WebkitTextStroke: style.outline > 0 && !style.box ? `${Math.min(3, style.outline * 0.45)}px ${style.outlineColor}` : undefined,
+    textShadow: style.glow
+      ? `0 0 14px ${style.highlightColor}, 0 0 30px ${style.highlightColor}`
+      : style.shadow > 0
+        ? `0 ${style.shadow}px ${style.shadow * 2.5}px rgba(0,0,0,.85)`
+        : undefined,
+    background: style.box ? style.boxColor : "rgba(0,0,0,.3)",
+    lineHeight: 1.2,
+  };
+
+  function renderPreviewCaption() {
+    if (!activeSegment) return null;
+    const words = activeSegment.text.trim().split(/\s+/).filter(Boolean);
+    if (style.karaoke === "word") {
+      const word = words[Math.max(0, activeWord)] ?? "";
+      return <span>{word}</span>;
+    }
+    return words.map((word, index) => {
+      let color = style.color;
+      if (style.karaoke === "fill" || style.karaoke === "pop") {
+        color = index <= activeWord ? style.highlightColor : style.color;
+      }
+      return (
+        <span key={`${word}-${index}`} style={{ color }}>
+          {word}{" "}
+        </span>
+      );
+    });
+  }
 
   return (
     <div className="studio-shell overflow-hidden rounded-[30px] border border-white/10 bg-[#0b0b0d] text-white shadow-[0_40px_120px_-45px_rgba(0,0,0,0.8)]">
@@ -345,6 +489,52 @@ export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { 
           <button onClick={renderVideo} disabled={rendering} className="rounded-full bg-white px-5 py-2 text-[12px] font-semibold text-black transition hover:bg-white/90 disabled:opacity-50">
             {rendering ? `${renderProgress || 1}% · Rendering` : "Export video"}
           </button>
+        </div>
+      </div>
+
+      {/* Trending style presets */}
+      <div className="border-b border-white/10 bg-[#0e0e11] px-5 py-4">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Caption styles</p>
+          <p className="text-[10px] text-white/25">Trending looks — tweak anything after picking one</p>
+        </div>
+        <div className="mt-3 flex gap-2.5 overflow-x-auto pb-1">
+          {CAPTION_PRESETS.map((preset) => {
+            const ps = preset.style;
+            const active = style.preset === preset.id;
+            return (
+              <button
+                key={preset.id}
+                onClick={() => setStyle(applyPreset(style, preset))}
+                className={`group w-[118px] shrink-0 rounded-2xl border p-2 text-left transition ${active ? "border-[#5ac8fa] bg-[#5ac8fa]/10" : "border-white/10 bg-white/[0.03] hover:border-white/25"}`}
+              >
+                <span
+                  className="flex h-12 items-center justify-center overflow-hidden rounded-xl bg-[#1c1c20] px-1"
+                  style={{
+                    fontFamily: ps.font === "Impact" ? "Impact, 'Arial Black', sans-serif" : ps.font,
+                    fontWeight: ps.bold ? 800 : 500,
+                    textTransform: ps.uppercase ? "uppercase" : "none",
+                    fontSize: 13,
+                    color: ps.color,
+                    WebkitTextStroke: ps.outline > 0 && !ps.box ? `0.6px ${ps.outlineColor}` : undefined,
+                    textShadow: ps.glow ? `0 0 10px ${ps.highlightColor}` : undefined,
+                  }}
+                >
+                  <span style={ps.box ? { background: ps.boxColor, borderRadius: 6, padding: "2px 6px" } : undefined}>
+                    {ps.karaoke === "word" ? (
+                      "WORD"
+                    ) : (
+                      <>
+                        Every <span style={{ color: ps.highlightColor }}>word</span>
+                      </>
+                    )}
+                  </span>
+                </span>
+                <span className={`mt-1.5 block text-[11px] font-semibold ${active ? "text-[#8edfff]" : "text-white/80"}`}>{preset.name}</span>
+                <span className="block text-[9px] text-white/35">{preset.tag}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -382,13 +572,8 @@ export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { 
             )}
             {activeSegment && (
               <div className={`pointer-events-none absolute left-[7%] right-[7%] text-center ${placementClass}`}>
-                <p
-                  className="inline rounded-lg bg-black/35 px-2 py-1 font-bold leading-[1.22] [text-shadow:0_2px_5px_rgba(0,0,0,0.9)] box-decoration-clone"
-                  style={{ color: style.color, fontFamily: style.font, fontSize: previewFontSize }}
-                >
-                  {activeSegment.text.trim().split(/\s+/).map((word, index) => (
-                    <span key={`${word}-${index}`} className={style.karaoke && index !== activeWord ? "text-white/45" : "text-inherit"}>{word}{" "}</span>
-                  ))}
+                <p className="inline rounded-lg px-2 py-1 box-decoration-clone" style={previewTextStyle}>
+                  {renderPreviewCaption()}
                 </p>
               </div>
             )}
@@ -422,34 +607,115 @@ export default function SubtitleStudio({ defaultUrl = "", projectId = null }: { 
           <select value={style.font} onChange={(event) => updateStyle({ font: event.target.value as CaptionStyle["font"] })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[12px] outline-none focus:border-white/30">
             {FONTS.map((font) => <option key={font} value={font} className="bg-[#17171a]">{font}</option>)}
           </select>
-          <div className="mt-4 grid grid-cols-[1fr_72px] gap-3">
-            <label className="text-[11px] text-white/45">Size<input type="range" min="28" max="96" value={style.size} onChange={(event) => updateStyle({ size: Number(event.target.value) })} className="mt-2 w-full accent-white" /></label>
-            <label className="text-[11px] text-white/45">Color<span className="mt-1 flex h-9 items-center rounded-xl border border-white/10 bg-white/5 p-1"><input type="color" value={style.color} onChange={(event) => updateStyle({ color: event.target.value })} className="h-full w-full cursor-pointer rounded-lg border-0 bg-transparent" /></span></label>
+          <label className="mt-4 block text-[11px] text-white/45">Size<input type="range" min="28" max="110" value={style.size} onChange={(event) => updateStyle({ size: Number(event.target.value) })} className="mt-2 w-full accent-white" /></label>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="text-[11px] text-white/45">Text<span className="mt-1 flex h-9 items-center rounded-xl border border-white/10 bg-white/5 p-1"><input type="color" value={style.color} onChange={(event) => updateStyle({ color: event.target.value })} className="h-full w-full cursor-pointer rounded-lg border-0 bg-transparent" /></span></label>
+            <label className="text-[11px] text-white/45">Highlight<span className="mt-1 flex h-9 items-center rounded-xl border border-white/10 bg-white/5 p-1"><input type="color" value={style.highlightColor} onChange={(event) => updateStyle({ highlightColor: event.target.value })} className="h-full w-full cursor-pointer rounded-lg border-0 bg-transparent" /></span></label>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => updateStyle({ uppercase: !style.uppercase })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] font-semibold transition ${style.uppercase ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>AA</button>
+            <button onClick={() => updateStyle({ bold: !style.bold })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] font-bold transition ${style.bold ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>B</button>
+            <button onClick={() => updateStyle({ glow: !style.glow })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] transition ${style.glow ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>✦</button>
+            <button onClick={() => updateStyle({ box: !style.box })} className={`flex-1 rounded-xl border px-2 py-2 text-[11px] transition ${style.box ? "border-white bg-white text-black" : "border-white/10 text-white/55 hover:bg-white/5"}`}>▣</button>
+          </div>
+          <label className="mt-3 block text-[11px] text-white/45">Outline<input type="range" min="0" max="8" value={style.outline} onChange={(event) => updateStyle({ outline: Number(event.target.value) })} className="mt-2 w-full accent-white" /></label>
+
+          <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Animation</p>
+          <div className="mt-3 flex rounded-xl bg-white/5 p-1">
+            {KARAOKE_MODES.map((mode) => <button key={mode.value} onClick={() => updateStyle({ karaoke: mode.value })} className={`flex-1 rounded-lg py-2 text-[10px] font-medium transition ${style.karaoke === mode.value ? "bg-white text-black" : "text-white/45"}`}>{mode.label}</button>)}
           </div>
 
           <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Position</p>
           <div className="mt-3 flex rounded-xl bg-white/5 p-1">
             {PLACEMENTS.map((placement) => <button key={placement.value} onClick={() => updateStyle({ placement: placement.value })} className={`flex-1 rounded-lg py-2 text-[10px] font-medium transition ${style.placement === placement.value ? "bg-white text-black" : "text-white/45"}`}>{placement.label}</button>)}
           </div>
-          <label className="mt-4 flex cursor-pointer items-center justify-between rounded-xl border border-white/10 px-3 py-3 text-[12px] text-white/65"><span>Karaoke highlight</span><input type="checkbox" checked={style.karaoke} onChange={(event) => updateStyle({ karaoke: event.target.checked })} className="h-4 w-4 accent-white" /></label>
         </aside>
       </div>
 
+      {/* CapCut-style timeline */}
       <section className="border-t border-white/10 bg-[#0e0e11] px-5 py-5">
-        <div className="flex items-center justify-between"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Timeline</p><p className="font-mono text-[11px] text-white/40">{formatClock(currentTime)} / {formatClock(duration)}</p></div>
-        <div className="relative mt-3 h-16 overflow-hidden rounded-xl bg-white/[0.035]" onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); seek(((event.clientX - box.left) / box.width) * duration); }}>
-          <div className="absolute inset-y-0 z-10 w-px bg-white" style={{ left: `${Math.min(100, (currentTime / duration) * 100)}%` }}><span className="absolute -left-1 -top-1 h-2 w-2 rotate-45 bg-white" /></div>
-          {segments.map((segment, index) => <button key={index} onClick={(event) => { event.stopPropagation(); seek(segment.start, true); }} className={`absolute bottom-2 top-2 overflow-hidden rounded-md border px-2 text-left text-[9px] leading-tight transition ${index === activeIndex ? "border-[#5ac8fa] bg-[#5ac8fa]/25 text-white" : "border-white/10 bg-white/[0.06] text-white/40 hover:bg-white/10"}`} style={{ left: `${(segment.start / duration) * 100}%`, width: `${Math.max(0.6, ((segment.end - segment.start) / duration) * 100)}%` }} title={segment.text}>{segment.text}</button>)}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Timeline</p>
+            <button onClick={addSegmentAtPlayhead} className="rounded-full border border-white/15 px-3 py-1 text-[10px] font-medium text-white/60 transition hover:bg-white/10">＋ Caption at playhead</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPxPerSec((v) => Math.max(14, v / 1.4))} className="grid h-6 w-6 place-items-center rounded-md border border-white/15 text-[12px] text-white/60 transition hover:bg-white/10">−</button>
+            <button onClick={() => setPxPerSec((v) => Math.min(240, v * 1.4))} className="grid h-6 w-6 place-items-center rounded-md border border-white/15 text-[12px] text-white/60 transition hover:bg-white/10">＋</button>
+            <button onClick={() => { const box = timelineScrollRef.current; if (box) setPxPerSec(Math.max(14, (box.clientWidth - 24) / duration)); }} className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] text-white/60 transition hover:bg-white/10">Fit</button>
+            <p className="ml-2 font-mono text-[11px] text-white/40">{formatClock(currentTime)} / {formatClock(duration)}</p>
+          </div>
         </div>
+
+        <div
+          ref={timelineScrollRef}
+          className={`relative mt-3 overflow-x-auto overscroll-x-contain rounded-xl bg-white/[0.03] ${dragging ? "select-none" : ""}`}
+          onPointerMove={onTimelinePointerMove}
+          onPointerUp={endTimelineDrag}
+          onPointerLeave={() => { if (dragRef.current?.type === "scrub") dragRef.current = null; }}
+        >
+          <div className="relative" style={{ width: timelineWidth }}>
+            {/* Ruler */}
+            <div className="relative h-7 cursor-col-resize border-b border-white/10" onPointerDown={beginScrub}>
+              {Array.from({ length: Math.floor(duration / step) + 1 }, (_, i) => i * step).map((t) => (
+                <div key={t} className="absolute bottom-0 top-0" style={{ left: t * pxPerSec }}>
+                  <span className="absolute bottom-0 h-2 w-px bg-white/25" />
+                  <span className="absolute left-1.5 top-1 font-mono text-[9px] text-white/35">{formatClock(t)}</span>
+                </div>
+              ))}
+              {step >= 2 &&
+                Array.from({ length: Math.floor(duration) + 1 }, (_, i) => i).filter((t) => t % step !== 0).map((t) => (
+                  <span key={`m${t}`} className="absolute bottom-0 h-1 w-px bg-white/10" style={{ left: t * pxPerSec }} />
+                ))}
+            </div>
+
+            {/* Caption track */}
+            <div className="relative h-[74px]" onPointerDown={beginScrub}>
+              {segments.map((segment, index) => {
+                const isActive = index === activeIndex;
+                const isSelected = index === selected;
+                return (
+                  <div
+                    key={index}
+                    onPointerDown={(event) => beginBlockDrag(event, index, "move")}
+                    onDoubleClick={() => seek(segment.start, true)}
+                    className={`absolute bottom-2.5 top-2.5 cursor-grab touch-none overflow-hidden rounded-lg border text-left transition-colors active:cursor-grabbing ${
+                      isSelected
+                        ? "z-10 border-[#5ac8fa] bg-[#5ac8fa]/30"
+                        : isActive
+                          ? "border-[#5ac8fa]/60 bg-[#5ac8fa]/20"
+                          : "border-white/10 bg-white/[0.07] hover:bg-white/10"
+                    }`}
+                    style={{ left: segment.start * pxPerSec, width: Math.max(10, (segment.end - segment.start) * pxPerSec) }}
+                    title={segment.text}
+                  >
+                    <span className="pointer-events-none block truncate px-2.5 pt-1.5 text-[10px] font-medium leading-tight text-white/85">{segment.text}</span>
+                    <span className="pointer-events-none absolute bottom-1 left-2.5 font-mono text-[8px] text-white/40">{formatClock(segment.start)}</span>
+                    {/* Trim handles */}
+                    <span onPointerDown={(event) => beginBlockDrag(event, index, "trim-start")} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize touch-none bg-gradient-to-r from-white/25 to-transparent opacity-0 transition hover:opacity-100" style={{ opacity: isSelected ? 1 : undefined }} />
+                    <span onPointerDown={(event) => beginBlockDrag(event, index, "trim-end")} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none bg-gradient-to-l from-white/25 to-transparent opacity-0 transition hover:opacity-100" style={{ opacity: isSelected ? 1 : undefined }} />
+                  </div>
+                );
+              })}
+
+              {/* Playhead */}
+              <div className="pointer-events-none absolute -top-7 bottom-0 z-20 w-px bg-[#ff453a]" style={{ left: currentTime * pxPerSec }}>
+                <span className="absolute -left-[5px] -top-px h-0 w-0 border-x-[5px] border-t-[7px] border-x-transparent border-t-[#ff453a]" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <p className="mt-2 text-[10px] text-white/25">Drag a block to move it · drag its edges to retime · double-click to jump to its text</p>
       </section>
 
       <section className="max-h-[460px] overflow-y-auto border-t border-white/10 bg-[#131316] p-5">
         <div className="mb-3 flex items-center justify-between"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Captions</p><p className="text-[11px] text-white/30">Click a timestamp to preview</p></div>
         <div className="space-y-1.5">
           {segments.map((segment, index) => (
-            <div key={index} className={`grid grid-cols-[92px_minmax(0,1fr)] gap-3 rounded-xl border p-3 transition ${index === activeIndex ? "border-white/25 bg-white/[0.07]" : "border-transparent hover:bg-white/[0.035]"}`}>
+            <div key={index} className={`grid grid-cols-[92px_minmax(0,1fr)_26px] gap-3 rounded-xl border p-3 transition ${index === activeIndex ? "border-white/25 bg-white/[0.07]" : "border-transparent hover:bg-white/[0.035]"}`}>
               <div><button onClick={() => seek(segment.start)} className="font-mono text-[11px] text-[#5ac8fa]">{formatClock(segment.start)}</button><div className="mt-2 flex gap-1"><input aria-label="Start time" type="number" min="0" step="0.01" value={segment.start} onChange={(event) => updateSegment(index, { start: Number(event.target.value) })} className="w-11 rounded bg-white/5 px-1 py-1 font-mono text-[9px] text-white/55 outline-none" /><input aria-label="End time" type="number" min="0" step="0.01" value={segment.end} onChange={(event) => updateSegment(index, { end: Number(event.target.value) })} className="w-11 rounded bg-white/5 px-1 py-1 font-mono text-[9px] text-white/55 outline-none" /></div></div>
               <textarea ref={(node) => { segmentRefs.current[index] = node; }} value={segment.text} onChange={(event) => updateSegment(index, { text: event.target.value })} rows={2} className="resize-none bg-transparent text-[13px] leading-relaxed text-white/80 outline-none placeholder:text-white/20" />
+              <button onClick={() => deleteSegment(index)} aria-label="Delete caption" className="self-start rounded-md p-1 text-white/25 transition hover:bg-white/10 hover:text-red-300">✕</button>
             </div>
           ))}
         </div>
