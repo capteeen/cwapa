@@ -158,14 +158,14 @@ export function validateSegments(segments: TranscriptSegment[]): TranscriptSegme
   });
 }
 
-// The render container ships Liberation fonts; map the UI font names to
-// metric-compatible faces so exports look like the preview.
+// The render container ships Liberation and URW Base 35 fonts; map the UI
+// names to metric-compatible faces so exports look like the preview.
 const RENDER_FONTS: Record<CaptionFont, string> = {
   Helvetica: "Liberation Sans",
   Arial: "Liberation Sans",
   Georgia: "Liberation Serif",
   "Courier New": "Liberation Mono",
-  Impact: "Liberation Sans Narrow",
+  Impact: "Nimbus Sans Narrow",
 };
 
 export function toAss(segments: TranscriptSegment[], style: CaptionStyle): string {

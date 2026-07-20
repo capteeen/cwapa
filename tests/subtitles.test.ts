@@ -64,6 +64,11 @@ test("box style switches to BorderStyle 3", () => {
   assert.match(ass, /,100,100,0,0,3,\d+,\d+,/);
 });
 
+test("Impact exports use the condensed font installed in the render image", () => {
+  const ass = toAss(segments, { ...DEFAULT_CAPTION_STYLE, font: "Impact" });
+  assert.match(ass, /Style: Caption,Nimbus Sans Narrow,/);
+});
+
 test("presets apply while preserving canvas and placement", async () => {
   const { CAPTION_PRESETS, applyPreset } = await import("../lib/captionPresets.ts");
   const beast = CAPTION_PRESETS.find((preset) => preset.id === "beast")!;
