@@ -3,6 +3,8 @@ import Link from "next/link";
 import BrandLogo from "@/components/BrandLogo";
 import ProductIcon, { type ProductIconName } from "@/components/ProductIcon";
 import TranscriberTool from "@/components/TranscriberTool";
+import LandingWorkflowMap from "@/components/LandingWorkflowMap";
+import CreatorUseCases from "@/components/CreatorUseCases";
 
 const features: Array<{ icon: ProductIconName; number: string; title: string; body: string; href: string }> = [
   { icon: "transcript", number: "01", title: "Transcribe anything", body: "Clean, timestamped speech-to-text from YouTube, TikTok, Instagram, or your own files.", href: "#transcribe" },
@@ -39,6 +41,8 @@ export default function Home() {
       </div>
     </section>
 
+    <LandingWorkflowMap />
+
     <section className="bg-[#f4f1ea] px-5 py-24 sm:px-10">
       <div className="mx-auto max-w-7xl space-y-6">
         <article className="grid overflow-hidden rounded-[34px] border border-black/10 bg-white shadow-[0_35px_90px_-55px_rgba(18,18,20,.55)] lg:grid-cols-[1.2fr_.8fr]">
@@ -52,6 +56,8 @@ export default function Home() {
         </article>
       </div>
     </section>
+
+    <CreatorUseCases />
 
     <section className="bg-[#141416] px-6 py-24 text-white sm:px-10"><div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.15fr_.85fr]"><div><p className="text-[10px] font-bold uppercase tracking-[.24em] text-[#75d6ff]">Built for momentum</p><h2 className="mt-5 text-5xl font-semibold leading-[.96] tracking-[-.055em] sm:text-7xl">Your work remembers<br/>where you left off.</h2><p className="mt-7 max-w-xl text-[15px] leading-7 text-white/55">Sign in to save transcripts, organize projects into folders, reopen source videos, and move directly from a transcript into Caption Studio or the Content Repurposer.</p><Link href="/auth" className="mt-9 inline-flex rounded-full bg-[#75d6ff] px-7 py-3.5 text-[13px] font-semibold text-[#101012] transition hover:bg-white">Create your workspace</Link></div><div className="relative rounded-[28px] border border-white/10 bg-white/[.04] p-5"><div className="rounded-[22px] bg-[#f5f2eb] p-6 text-[#161618]"><div className="flex items-center justify-between"><BrandLogo/><span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-semibold text-emerald-700">● Signed in</span></div><div className="mt-9 space-y-3">{[["Launch interview","12:48","Ready"],["Creator systems","28:04","Captioned"],["Weekly research","08:31","Translated"]].map(([name,time,status])=><div key={name} className="flex items-center justify-between rounded-2xl border border-black/8 bg-white px-4 py-4"><div><p className="text-[13px] font-semibold">{name}</p><p className="mt-1 text-[10px] text-black/45">{time} · {status}</p></div><ProductIcon name="library" className="h-5 w-5 text-[#087cab]"/></div>)}</div></div></div></div></section>
   </main>;
