@@ -1,5 +1,27 @@
 import { createBrowserClient } from "@insforge/sdk/ssr";
 
+declare global {
+  interface Window {
+    __CWAPA_CONFIG__?: {
+      insforgeUrl?: string;
+      insforgeAnonKey?: string;
+    };
+  }
+}
+
+function publicConfig() {
+  if (typeof window !== "undefined" && window.__CWAPA_CONFIG__) {
+    return {
+      baseUrl: window.__CWAPA_CONFIG__.insforgeUrl,
+      anonKey: window.__CWAPA_CONFIG__.insforgeAnonKey,
+    };
+  }
+  return {
+    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL,
+    anonKey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY,
+  };
+}
+
 export interface FolderRecord {
   id: string;
   user_id: string;
@@ -45,18 +67,17 @@ export interface TranscriptSegmentRecord {
 }
 
 export function isInsForgeConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_INSFORGE_URL &&
-      process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY
-  );
+  const config = publicConfig();
+  return Boolean(config.baseUrl && config.anonKey);
 }
 
 export function getInsForgeBrowserClient() {
-  if (!isInsForgeConfigured()) {
+  const config = publicConfig();
+  if (!config.baseUrl || !config.anonKey) {
     throw new Error("The cwapa account service is not configured yet.");
   }
   return createBrowserClient({
-    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL!,
-    anonKey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!,
+    baseUrl: config.baseUrl,
+    anonKey: config.anonKey,
   });
 }
