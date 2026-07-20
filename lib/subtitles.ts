@@ -2,7 +2,17 @@ import type { TranscriptSegment } from "./whisper";
 
 export type CaptionAspect = "9:16" | "1:1" | "16:9";
 export type CaptionPlacement = "top" | "middle" | "bottom";
-export type CaptionFont = "Helvetica" | "Arial" | "Georgia" | "Courier New" | "Impact";
+export type CaptionFont =
+  | "Inter"
+  | "Roboto"
+  | "Open Sans"
+  | "Lato"
+  | "Comic Neue"
+  | "Helvetica"
+  | "Arial"
+  | "Georgia"
+  | "Courier New"
+  | "Impact";
 /**
  * off   — static text
  * fill  — classic karaoke sweep across each word (\kf)
@@ -32,7 +42,7 @@ export interface CaptionStyle {
 
 export const DEFAULT_CAPTION_STYLE: CaptionStyle = {
   preset: "clean",
-  font: "Helvetica",
+  font: "Inter",
   color: "#ffffff",
   highlightColor: "#5ac8fa",
   size: 54,
@@ -158,9 +168,14 @@ export function validateSegments(segments: TranscriptSegment[]): TranscriptSegme
   });
 }
 
-// The render container ships Liberation and URW Base 35 fonts; map the UI
-// names to metric-compatible faces so exports look like the preview.
+// Keep these names aligned with the font packages installed in Dockerfile.
+// Legacy UI names map to metric-compatible faces available in the container.
 const RENDER_FONTS: Record<CaptionFont, string> = {
+  Inter: "Inter",
+  Roboto: "Roboto",
+  "Open Sans": "Open Sans",
+  Lato: "Lato",
+  "Comic Neue": "Comic Neue",
   Helvetica: "Liberation Sans",
   Arial: "Liberation Sans",
   Georgia: "Liberation Serif",

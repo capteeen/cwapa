@@ -25,7 +25,31 @@ interface StudioMeta {
   thumbnail: string | null;
 }
 
-const FONTS: CaptionStyle["font"][] = ["Helvetica", "Arial", "Georgia", "Courier New", "Impact"];
+const FONTS: CaptionStyle["font"][] = [
+  "Inter",
+  "Roboto",
+  "Open Sans",
+  "Lato",
+  "Comic Neue",
+  "Helvetica",
+  "Arial",
+  "Impact",
+  "Georgia",
+  "Courier New",
+];
+
+const PREVIEW_FONT_STACKS: Record<CaptionStyle["font"], string> = {
+  Inter: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  Roboto: "Roboto, 'Helvetica Neue', Arial, sans-serif",
+  "Open Sans": "'Open Sans', 'Helvetica Neue', Arial, sans-serif",
+  Lato: "Lato, 'Helvetica Neue', Arial, sans-serif",
+  "Comic Neue": "'Comic Neue', 'Comic Sans MS', cursive",
+  Helvetica: "Helvetica, Arial, sans-serif",
+  Arial: "Arial, Helvetica, sans-serif",
+  Impact: "Impact, 'Arial Black', sans-serif",
+  Georgia: "Georgia, 'Times New Roman', serif",
+  "Courier New": "'Courier New', Courier, monospace",
+};
 
 const ASPECTS: { value: CaptionAspect; label: string; icon: string }[] = [
   { value: "9:16", label: "Vertical", icon: "▯" },
@@ -366,7 +390,7 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
   const dragging = dragRef.current !== null && dragRef.current.type !== "scrub";
 
   const previewTextStyle: React.CSSProperties = {
-    fontFamily: style.font === "Impact" ? "Impact, 'Arial Black', sans-serif" : style.font,
+    fontFamily: PREVIEW_FONT_STACKS[style.font],
     fontSize: previewFontSize,
     fontWeight: style.bold ? 800 : 500,
     color: style.color,
@@ -437,7 +461,7 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
                 <span
                   className="flex h-12 items-center justify-center overflow-hidden rounded-xl bg-[#1c1c20] px-1"
                   style={{
-                    fontFamily: ps.font === "Impact" ? "Impact, 'Arial Black', sans-serif" : ps.font,
+                    fontFamily: PREVIEW_FONT_STACKS[ps.font],
                     fontWeight: ps.bold ? 800 : 500,
                     textTransform: ps.uppercase ? "uppercase" : "none",
                     fontSize: 13,
@@ -530,7 +554,7 @@ export default function SubtitleStudio({ defaultUrl = "" }: { defaultUrl?: strin
           <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Typography</p>
           <label className="mt-3 block text-[11px] text-white/45">Font</label>
           <select value={style.font} onChange={(event) => setStyle({ ...style, font: event.target.value as CaptionStyle["font"] })} className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[12px] outline-none focus:border-white/30">
-            {FONTS.map((font) => <option key={font} value={font} className="bg-[#17171a]">{font}</option>)}
+            {FONTS.map((font) => <option key={font} value={font} className="bg-[#17171a]" style={{ fontFamily: PREVIEW_FONT_STACKS[font] }}>{font}</option>)}
           </select>
           <label className="mt-4 block text-[11px] text-white/45">Size<input type="range" min="28" max="110" value={style.size} onChange={(event) => setStyle({ ...style, size: Number(event.target.value) })} className="mt-2 w-full accent-white" /></label>
           <div className="mt-3 grid grid-cols-2 gap-3">

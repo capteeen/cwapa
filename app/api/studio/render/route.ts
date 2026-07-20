@@ -23,7 +23,18 @@ export const maxDuration = 300;
 
 const execFileAsync = promisify(execFile);
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
-const FONTS = new Set(["Helvetica", "Arial", "Georgia", "Courier New", "Impact"]);
+const FONTS = new Set([
+  "Inter",
+  "Roboto",
+  "Open Sans",
+  "Lato",
+  "Comic Neue",
+  "Helvetica",
+  "Arial",
+  "Georgia",
+  "Courier New",
+  "Impact",
+]);
 const ASPECTS = new Set<CaptionAspect>(["9:16", "1:1", "16:9"]);
 const PLACEMENTS = new Set<CaptionPlacement>(["top", "middle", "bottom"]);
 const KARAOKE_MODES = new Set(["off", "fill", "pop", "word"]);
