@@ -18,7 +18,7 @@ export default function BrandLogo({
   inverted?: boolean;
   adaptive?: boolean;
 }) {
-  const foreground = adaptive
+  const wordmark = adaptive
     ? "text-white mix-blend-difference"
     : inverted
       ? "text-white"
@@ -28,10 +28,10 @@ export default function BrandLogo({
     <Link
       href="/"
       aria-label="cwapa home"
-      className={`inline-flex items-center gap-2.5 ${foreground}`}
+      className="inline-flex items-center gap-2.5"
     >
-      <BrandMark className="h-8 w-8" />
-      <span className="text-[20px] font-semibold tracking-[-0.055em]">cwapa</span>
+      <BrandMark className="h-8 w-8 shrink-0 text-[#202024] drop-shadow-[0_4px_12px_rgba(0,0,0,.16)]" />
+      <span className={`text-[20px] font-semibold tracking-[-0.055em] ${wordmark}`}>cwapa</span>
     </Link>
   );
 }
