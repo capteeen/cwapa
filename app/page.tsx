@@ -1,67 +1,44 @@
+import Image from "next/image";
 import Link from "next/link";
+import BrandLogo from "@/components/BrandLogo";
+import ProductIcon, { type ProductIconName } from "@/components/ProductIcon";
 import TranscriberTool from "@/components/TranscriberTool";
 
+const features: Array<{ icon: ProductIconName; number: string; title: string; body: string; href: string }> = [
+  { icon: "transcript", number: "01", title: "Transcribe anything", body: "Clean, timestamped speech-to-text from YouTube, TikTok, Instagram, or your own files.", href: "#transcribe" },
+  { icon: "captions", number: "02", title: "Design the captions", body: "Edit every line, style the type, highlight spoken words, and export for every screen.", href: "/studio" },
+  { icon: "clips", number: "03", title: "Find the moment", body: "Describe the clip you need in plain English. cwapa finds the timestamp and cuts it precisely.", href: "/clip" },
+  { icon: "repurpose", number: "04", title: "Publish it everywhere", body: "Turn one transcript into hooks, titles, TikTok captions, X threads, and LinkedIn posts.", href: "/repurpose" },
+];
+
 export default function Home() {
-  return (
-    <main className="mx-auto w-full max-w-2xl px-6 pb-24 pt-20">
-      <header className="mb-12 text-center">
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-[44px] sm:leading-tight">
-          Turn any video into text.
-        </h1>
-        <p className="mx-auto mt-4 max-w-md text-[17px] leading-relaxed text-muted">
-          Paste a TikTok, YouTube, or Instagram link — or upload a file. Get a
-          clean transcript with AI summary, or download the video or audio.
-        </p>
-      </header>
+  return <main className="overflow-hidden bg-[#f4f1ea]">
+    <section className="relative isolate min-h-[760px] overflow-hidden bg-[#141416] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_8%,rgba(117,214,255,.14),transparent_28%),linear-gradient(90deg,rgba(20,20,22,.98)_0%,rgba(20,20,22,.92)_38%,rgba(20,20,22,.15)_74%)]" />
+      <Image src="/brand/cwapa-creator-workspace.png" alt="A cinematic cwapa creator workspace with video, waveform, and caption timeline layers" fill priority sizes="100vw" className="-z-10 object-cover object-center opacity-80 lg:object-[58%_center]" />
+      <div className="relative mx-auto flex min-h-[760px] max-w-7xl items-end px-6 pb-16 pt-28 sm:px-10 lg:items-center lg:pb-0">
+        <div className="max-w-[710px]">
+          <div className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-black/20 px-4 py-2 text-[10px] font-semibold uppercase tracking-[.22em] text-white/65 backdrop-blur-xl"><span className="h-1.5 w-1.5 rounded-full bg-[#75d6ff] shadow-[0_0_14px_#75d6ff]" />The creator’s video workspace</div>
+          <h1 className="mt-7 max-w-3xl text-[54px] font-semibold leading-[.92] tracking-[-.06em] sm:text-[76px] lg:text-[92px]">One video.<br/><span className="text-[#8edfff]">Every possibility.</span></h1>
+          <p className="mt-7 max-w-xl text-[16px] leading-7 text-white/62 sm:text-[18px]">Transcribe, caption, clip, translate, and reshape your content without leaving the flow. cwapa turns raw footage into work that is ready to publish.</p>
+          <div className="mt-9 flex flex-wrap gap-3"><a href="#transcribe" className="rounded-full bg-white px-7 py-3.5 text-[13px] font-semibold text-[#141416] transition hover:-translate-y-0.5 hover:bg-[#dff6ff]">Start with a video</a><Link href="/studio" className="rounded-full border border-white/25 bg-white/[.06] px-7 py-3.5 text-[13px] font-semibold text-white backdrop-blur transition hover:bg-white/10">Explore Caption Studio</Link></div>
+          <div className="mt-12 flex items-center gap-5 text-[11px] text-white/40"><span>No install</span><span className="h-px w-7 bg-white/20"/><span>YouTube · TikTok · Instagram · Uploads</span></div>
+        </div>
+      </div>
+      <div className="absolute bottom-0 right-0 hidden -translate-y-8 rotate-90 text-[9px] font-semibold uppercase tracking-[.3em] text-white/30 xl:block">From source to story</div>
+    </section>
 
-      <TranscriberTool />
+    <section id="transcribe" className="relative z-10 mx-auto -mt-1 max-w-5xl px-5 pb-28 pt-20 sm:px-8">
+      <div className="mb-9 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-[10px] font-bold uppercase tracking-[.22em] text-[#087cab]">Start here</p><h2 className="mt-2 text-4xl font-semibold tracking-[-.045em] sm:text-5xl">Drop in a video. Get clarity out.</h2></div><p className="max-w-sm text-[13px] leading-6 text-[#6d6a65]">Your transcript becomes the foundation for captions, clips, translations, summaries, and social content.</p></div>
+      <div className="rounded-[32px] border border-black/10 bg-white p-5 shadow-[0_40px_100px_-55px_rgba(18,18,20,.5)] sm:p-9"><TranscriberTool /></div>
+    </section>
 
-      <section className="mt-16 grid gap-3 sm:grid-cols-2">
-        {[
-          {
-            title: "Transcripts",
-            body: "Accurate, timestamped speech-to-text in any language — from a link or your own files.",
-          },
-          {
-            title: "Moment search",
-            body: "Search any moment in plain English and jump straight to it.",
-          },
-          {
-            title: "AI summaries",
-            body: "One tap turns a long transcript into key takeaways.",
-          },
-          {
-            title: "Downloads",
-            body: "Save video in your chosen quality, or audio as MP3.",
-          },
-        ].map((f) => (
-          <div key={f.title} className="rounded-2xl bg-surface p-6">
-            <h3 className="text-[15px] font-semibold">{f.title}</h3>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
-              {f.body}
-            </p>
-          </div>
-        ))}
-      </section>
+    <section className="bg-[#e8e4dc] px-6 py-24 sm:px-10">
+      <div className="mx-auto max-w-7xl"><div className="grid gap-10 border-b border-black/15 pb-12 lg:grid-cols-[.8fr_1.2fr]"><p className="text-[10px] font-bold uppercase tracking-[.24em] text-[#087cab]">The cwapa workflow</p><h2 className="text-4xl font-semibold leading-[1.02] tracking-[-.05em] sm:text-6xl">Less switching.<br/>More making.</h2></div>
+        <div className="grid md:grid-cols-2">{features.map((feature) => <Link href={feature.href} key={feature.number} className="group relative border-b border-black/15 py-10 md:px-8 md:odd:border-r lg:min-h-[260px] lg:px-10"><div className="flex items-start justify-between"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#141416] text-[#8edfff] transition duration-300 group-hover:-rotate-3 group-hover:scale-105"><ProductIcon name={feature.icon} /></div><span className="font-mono text-[10px] text-black/35">{feature.number}</span></div><h3 className="mt-8 text-2xl font-semibold tracking-[-.035em]">{feature.title}</h3><p className="mt-3 max-w-md text-[14px] leading-6 text-[#68645e]">{feature.body}</p><span className="absolute bottom-10 right-8 translate-x-2 text-xl opacity-0 transition group-hover:translate-x-0 group-hover:opacity-100">↗</span></Link>)}</div>
+      </div>
+    </section>
 
-      <section className="mt-6 overflow-hidden rounded-2xl bg-ink p-8 text-white">
-        <p className="text-[13px] font-semibold uppercase tracking-wide text-accent-soft/90 text-[#6ea8ff]">
-          For clippers
-        </p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-          Find clips with unexpected precision.
-        </h2>
-        <p className="mt-2 max-w-md text-[14px] leading-relaxed text-white/70">
-          Describe the moment you want in plain English — cwapa finds it and cuts
-          the clip for you, ready to post.
-        </p>
-        <Link
-          href="/clip"
-          className="mt-5 inline-block rounded-full bg-white px-6 py-2.5 text-[14px] font-medium text-ink transition hover:bg-white/90"
-        >
-          Open Clip Finder →
-        </Link>
-      </section>
-    </main>
-  );
+    <section className="bg-[#141416] px-6 py-24 text-white sm:px-10"><div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.15fr_.85fr]"><div><p className="text-[10px] font-bold uppercase tracking-[.24em] text-[#75d6ff]">Built for momentum</p><h2 className="mt-5 text-5xl font-semibold leading-[.96] tracking-[-.055em] sm:text-7xl">Your work remembers<br/>where you left off.</h2><p className="mt-7 max-w-xl text-[15px] leading-7 text-white/55">Sign in to save transcripts, organize projects into folders, reopen source videos, and move directly from a transcript into Caption Studio or the Content Repurposer.</p><Link href="/auth" className="mt-9 inline-flex rounded-full bg-[#75d6ff] px-7 py-3.5 text-[13px] font-semibold text-[#101012] transition hover:bg-white">Create your workspace</Link></div><div className="relative rounded-[28px] border border-white/10 bg-white/[.04] p-5"><div className="rounded-[22px] bg-[#f5f2eb] p-6 text-[#161618]"><div className="flex items-center justify-between"><BrandLogo/><span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-semibold text-emerald-700">● Signed in</span></div><div className="mt-9 space-y-3">{[["Launch interview","12:48","Ready"],["Creator systems","28:04","Captioned"],["Weekly research","08:31","Translated"]].map(([name,time,status])=><div key={name} className="flex items-center justify-between rounded-2xl border border-black/8 bg-white px-4 py-4"><div><p className="text-[13px] font-semibold">{name}</p><p className="mt-1 text-[10px] text-black/45">{time} · {status}</p></div><ProductIcon name="library" className="h-5 w-5 text-[#087cab]"/></div>)}</div></div></div></div></section>
+  </main>;
 }
