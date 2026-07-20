@@ -29,11 +29,26 @@ export const metadata: Metadata = {
   },
 };
 
+// Railway exposes service variables at runtime. Render this layout per request
+// so browser-only SDK code receives the public account configuration even when
+// the build environment does not include NEXT_PUBLIC_* values.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const publicConfig = JSON.stringify({
+    insforgeUrl: process.env.NEXT_PUBLIC_INSFORGE_URL ?? "",
+    insforgeAnonKey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY ?? "",
+  }).replace(/</g, "\\u003c");
+
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{ __html: `window.__CWAPA_CONFIG__=${publicConfig}` }}
+        />
+      </head>
       <body>
         <div className="flex min-h-screen flex-col">
           <nav className="sticky top-0 z-10 border-b border-hairline/60 bg-white/80 backdrop-blur-xl">
