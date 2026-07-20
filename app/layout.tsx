@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 import AccountNav from "@/components/AccountNav";
+import BrandLogo from "@/components/BrandLogo";
 
 const description =
   "Paste a TikTok, YouTube, or Instagram link — or upload a file — and get a clean, timestamped transcript with AI summary. Find and cut clips in plain English, and download videos as MP4 or MP3.";
@@ -53,14 +54,12 @@ export default function RootLayout({
         <div className="flex min-h-screen flex-col">
           <nav className="sticky top-0 z-10 border-b border-hairline/60 bg-white/80 backdrop-blur-xl">
             <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-              <Link href="/" className="text-lg font-semibold tracking-tight">
-                cwapa
-              </Link>
+              <BrandLogo />
               <div className="flex items-center gap-3 text-[13px] sm:gap-6 sm:text-[14px]">
-                <Link href="/studio" className="text-muted transition hover:text-ink">
+                <Link href="/studio" className="hidden text-muted transition hover:text-ink md:block">
                   Caption Studio
                 </Link>
-                <Link href="/repurpose" className="text-muted transition hover:text-ink">
+                <Link href="/repurpose" className="hidden text-muted transition hover:text-ink sm:block">
                   Repurpose
                 </Link>
                 <Link href="/tools" className="hidden text-muted transition hover:text-ink sm:block">
@@ -76,8 +75,9 @@ export default function RootLayout({
 
           <div className="flex-1">{children}</div>
 
-          <footer className="border-t border-hairline/60 py-8">
-            <div className="mx-auto flex max-w-5xl flex-col items-center gap-3 px-6 text-[12px] text-muted">
+          <footer className="border-t border-hairline/60 bg-white py-10">
+            <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 px-6 text-[12px] text-muted">
+              <BrandLogo />
               <div className="flex flex-wrap justify-center gap-x-5 gap-y-1">
                 <Link href="/tools/youtube-video-downloader" className="hover:text-ink">
                   YouTube Downloader
@@ -95,7 +95,7 @@ export default function RootLayout({
                   Reels Downloader
                 </Link>
               </div>
-              <p>cwapa — transcriber today, video agent tomorrow</p>
+              <p>From source to story, without leaving the flow.</p>
             </div>
           </footer>
         </div>
